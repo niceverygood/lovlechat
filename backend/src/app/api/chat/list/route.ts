@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pool } from "@/lib/db";
+import { executeQuery } from "@/lib/db-helper";
 
 export async function GET(req: NextRequest) {
   // 더미 채팅 데이터 (DB 연결 실패시 폴백용)
@@ -17,33 +17,24 @@ export async function GET(req: NextRequest) {
     }
   ];
 
-  try {
-    // 연결 테스트 (타임아웃 적용)
-    await Promise.race([
-      pool.query("SELECT 1"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
-    ]);
-    
-    // 채팅 리스트 조회 (타임아웃 적용)
-    const result = await Promise.race([
-      pool.query(
-        `SELECT c.characterId, c.personaId, c.message as lastMessage, c.sender as lastSender, c.createdAt as lastMessageAt,
-                up.name as personaName, up.avatar as personaAvatar,
-                p.name, p.profileImg
-           FROM (
-             SELECT characterId, personaId, MAX(createdAt) as lastMessageAt
-             FROM chats
-             GROUP BY characterId, personaId
-           ) t
-           JOIN chats c ON c.characterId = t.characterId AND c.personaId = t.personaId AND c.createdAt = t.lastMessageAt
-           JOIN character_profiles p ON c.characterId = p.id
-           LEFT JOIN user_personas up ON c.personaId = up.id
-          ORDER BY c.createdAt DESC`
-      ),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 8000))
-    ]);
-    
-    const [rows] = result as any;
+    try {
+    // 최적화된 채팅 리스트 조회
+    const rows = await executeQuery(
+      `SELECT c.characterId, c.personaId, c.message as lastMessage, c.sender as lastSender, c.createdAt as lastMessageAt,
+              up.name as personaName, up.avatar as personaAvatar,
+              p.name, p.profileImg
+         FROM (
+           SELECT characterId, personaId, MAX(createdAt) as lastMessageAt
+           FROM chats
+           GROUP BY characterId, personaId
+         ) t
+         JOIN chats c ON c.characterId = t.characterId AND c.personaId = t.personaId AND c.createdAt = t.lastMessageAt
+         JOIN character_profiles p ON c.characterId = p.id
+         LEFT JOIN user_personas up ON c.personaId = up.id
+        ORDER BY c.createdAt DESC LIMIT 50`,
+      [],
+      6000
+    );
     
     return NextResponse.json({ ok: true, chats: rows }, {
       headers: {

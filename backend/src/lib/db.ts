@@ -7,7 +7,10 @@ export const pool = mysql.createPool({
   password: process.env.DB_PASSWORD || 'Lovle123!',
   database: process.env.DB_NAME || 'lovlechat-db',
   waitForConnections: true,
-  connectionLimit: 20,
+  connectionLimit: 10, // 연결 수 최적화
   queueLimit: 0,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
+  // 성능 최적화
+  multipleStatements: false,
+  dateStrings: false
 });

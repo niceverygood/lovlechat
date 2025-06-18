@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pool } from "@/lib/db";
+import { executeQuery, executeMutation } from "@/lib/db-helper";
 
 export async function POST(req: NextRequest) {
   const data = await req.json();
@@ -10,45 +10,37 @@ export async function POST(req: NextRequest) {
   } = data;
   
   try {
-    // 연결 테스트 (빠른 타임아웃)
-    await Promise.race([
-      pool.query("SELECT 1"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
-    ]);
-    
-    // INSERT 쿼리 (타임아웃 적용)
-    const result = await Promise.race([
-      pool.query(
-        `INSERT INTO character_profiles
-          (userId, profileImg, name, age, job, oneLiner, background, personality, habit, 
-           likes, dislikes, extraInfos, gender, scope, roomCode, category, tags, attachments, firstScene, firstMessage, backgroundImg, createdAt)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-        [
-          userId,
-          profileImg,
-          name,
-          age,
-          job,
-          oneLiner,
-          background,
-          personality,
-          habit,
-          like,
-          dislike,
-          JSON.stringify(extraInfos),
-          JSON.stringify(gender),
-          scope,
-          roomCode,
-          category,
-          JSON.stringify(selectedTags),
-          JSON.stringify(attachments),
-          firstScene,
-          firstMessage,
-          backgroundImg
-        ]
-      ),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 10000))
-    ]);
+    // 최적화된 INSERT 쿼리 (연결 테스트 없이 직접 실행)
+    const result = await executeMutation(
+      `INSERT INTO character_profiles
+        (userId, profileImg, name, age, job, oneLiner, background, personality, habit, 
+         likes, dislikes, extraInfos, gender, scope, roomCode, category, tags, attachments, firstScene, firstMessage, backgroundImg, createdAt)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        userId,
+        profileImg,
+        name,
+        age,
+        job,
+        oneLiner,
+        background,
+        personality,
+        habit,
+        like,
+        dislike,
+        JSON.stringify(extraInfos || {}),
+        JSON.stringify(gender || ''),
+        scope,
+        roomCode,
+        category,
+        JSON.stringify(selectedTags || []),
+        JSON.stringify(attachments || []),
+        firstScene,
+        firstMessage,
+        backgroundImg
+      ],
+      10000
+    );
     
     const [insertResult] = result as any;
     
@@ -109,24 +101,15 @@ export async function GET(req: NextRequest) {
 
   if (userId) {
     try {
-      // 연결 테스트 (빠른 실패를 위해 타임아웃 단축)
-      await Promise.race([
-        pool.query("SELECT 1"),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 5000))
-      ]);
-      
-      const result = await Promise.race([
-        pool.query(
-          `SELECT id, profileImg, name, age, job, oneLiner, attachments, firstScene, firstMessage, backgroundImg 
-           FROM character_profiles 
-           WHERE userId = ? AND id NOT IN (SELECT characterId FROM character_hidden WHERE userId = ?)
-           ORDER BY createdAt DESC LIMIT 10`,
-          [userId, userId]
-        ),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 10000))
-      ]);
-      
-      const [rows] = result as any;
+      // 최적화된 쿼리 실행
+      const rows = await executeQuery(
+        `SELECT id, profileImg, name, age, job, oneLiner, attachments, firstScene, firstMessage, backgroundImg 
+         FROM character_profiles 
+         WHERE userId = ? AND id NOT IN (SELECT characterId FROM character_hidden WHERE userId = ?)
+         ORDER BY createdAt DESC LIMIT 10`,
+        [userId, userId],
+        8000
+      );
       
       return NextResponse.json({ ok: true, characters: rows }, {
         headers: {
@@ -151,20 +134,12 @@ export async function GET(req: NextRequest) {
   
   // 전체 조회 (For You) - 폴백 데이터 우선 반환
   try {
-    // 연결 테스트
-    await Promise.race([
-      pool.query("SELECT 1"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
-    ]);
-    
-    const result = await Promise.race([
-      pool.query(
-        "SELECT id, profileImg, name, age, job, oneLiner, attachments, firstScene, firstMessage, backgroundImg FROM character_profiles ORDER BY createdAt DESC LIMIT 20"
-      ),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 8000))
-    ]);
-    
-    const [rows] = result as any;
+    // 최적화된 전체 캐릭터 조회
+    const rows = await executeQuery(
+      "SELECT id, profileImg, name, age, job, oneLiner, attachments, firstScene, firstMessage, backgroundImg FROM character_profiles ORDER BY createdAt DESC LIMIT 20",
+      [],
+      6000
+    );
     
     return NextResponse.json({ ok: true, characters: rows }, {
       headers: {
