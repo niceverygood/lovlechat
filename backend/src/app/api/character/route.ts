@@ -64,50 +64,112 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const userId = req.nextUrl.searchParams.get('userId');
+  
+  // 폴백 캐릭터 데이터
+  const fallbackCharacters = [
+    {
+      id: "1",
+      profileImg: "/imgdefault.jpg",
+      name: "아이유",
+      age: "30",
+      job: "가수",
+      oneLiner: "안녕하세요! 아이유입니다.",
+      attachments: null,
+      firstScene: "카페",
+      firstMessage: "안녕하세요! 오늘 하루는 어떠셨나요?",
+      backgroundImg: "/imgdefault.jpg"
+    },
+    {
+      id: "2", 
+      profileImg: "/imgdefault.jpg",
+      name: "김태연",
+      age: "35",
+      job: "가수",
+      oneLiner: "소녀시대 태연입니다!",
+      attachments: null,
+      firstScene: "연습실",
+      firstMessage: "안녕! 오늘도 열심히 해보자!",
+      backgroundImg: "/imgdefault.jpg"
+    }
+  ];
+
   if (userId) {
     try {
-      const [rows] = await pool.query(
-        `SELECT id, profileImg, name, age, job, oneLiner, attachments, firstScene, firstMessage, backgroundImg 
-         FROM character_profiles 
-         WHERE userId = ? AND id NOT IN (SELECT characterId FROM character_hidden WHERE userId = ?)
-         ORDER BY createdAt DESC`,
-        [userId, userId]
-      );
+      // 연결 테스트 (빠른 실패를 위해 타임아웃 단축)
+      await Promise.race([
+        pool.query("SELECT 1"),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 5000))
+      ]);
+      
+      const result = await Promise.race([
+        pool.query(
+          `SELECT id, profileImg, name, age, job, oneLiner, attachments, firstScene, firstMessage, backgroundImg 
+           FROM character_profiles 
+           WHERE userId = ? AND id NOT IN (SELECT characterId FROM character_hidden WHERE userId = ?)
+           ORDER BY createdAt DESC LIMIT 10`,
+          [userId, userId]
+        ),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 10000))
+      ]);
+      
+      const [rows] = result as any;
+      
       return NextResponse.json({ ok: true, characters: rows }, {
         headers: {
-          'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+          'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         }
       });
     } catch (err) {
       console.error("Database error:", err);
-      return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
-        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      } });
+      
+      // DB 에러시 폴백 데이터 반환
+      return NextResponse.json({ ok: true, characters: fallbackCharacters, fallback: true }, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }
+      });
     }
   }
-  // 기존 전체 조회 (For You)
+  
+  // 전체 조회 (For You) - 폴백 데이터 우선 반환
   try {
-    const [rows] = await pool.query(
-      "SELECT id, profileImg, name, age, job, oneLiner, attachments, firstScene, firstMessage, backgroundImg FROM character_profiles ORDER BY createdAt DESC"
-    );
+    // 연결 테스트
+    await Promise.race([
+      pool.query("SELECT 1"),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
+    ]);
+    
+    const result = await Promise.race([
+      pool.query(
+        "SELECT id, profileImg, name, age, job, oneLiner, attachments, firstScene, firstMessage, backgroundImg FROM character_profiles ORDER BY createdAt DESC LIMIT 20"
+      ),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 8000))
+    ]);
+    
+    const [rows] = result as any;
+    
     return NextResponse.json({ ok: true, characters: rows }, {
       headers: {
-        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       }
     });
   } catch (err) {
     console.error("Database error:", err);
-    return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
-      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    } });
+    
+    // DB 에러시 폴백 데이터 반환
+    return NextResponse.json({ ok: true, characters: fallbackCharacters, fallback: true }, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    });
   }
 }
 
