@@ -21,10 +21,22 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [rows] = await pool.query(
-      "SELECT MIN(createdAt) as firstDate FROM chats WHERE personaId = ? AND characterId = ?",
-      [personaId, characterId]
-    );
+    // 연결 테스트
+    await Promise.race([
+      pool.query("SELECT 1"),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
+    ]);
+    
+    // 첫 데이트 조회 (타임아웃 적용)
+    const result = await Promise.race([
+      pool.query(
+        "SELECT MIN(createdAt) as firstDate FROM chats WHERE personaId = ? AND characterId = ?",
+        [personaId, characterId]
+      ),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 5000))
+    ]);
+    
+    const [rows] = result as any;
 
     if (!Array.isArray(rows) || rows.length === 0) {
       return NextResponse.json(
@@ -52,10 +64,11 @@ export async function GET(req: NextRequest) {
     );
   } catch (err) {
     console.error("DB error:", err);
+    
+    // DB 에러시 기본값 반환
     return NextResponse.json(
-      { ok: false, error: String(err) },
-      { 
-        status: 500,
+      { ok: true, firstDate: null, fallback: true },
+      {
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',

@@ -21,11 +21,22 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const [rows] = await pool.query(
-      "SELECT favor FROM character_favors WHERE personaId = ? AND characterId = ?",
-      [userId, characterId]
-    );
+    // 연결 테스트
+    await Promise.race([
+      pool.query("SELECT 1"),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
+    ]);
     
+    // 호감도 조회 (타임아웃 적용)
+    const result = await Promise.race([
+      pool.query(
+        "SELECT favor FROM character_favors WHERE personaId = ? AND characterId = ?",
+        [userId, characterId]
+      ),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 5000))
+    ]);
+    
+    const [rows] = result as any;
     const favor = Array.isArray(rows) && rows.length > 0 ? (rows[0] as any)?.favor : 0;
     
     return NextResponse.json(
@@ -40,10 +51,11 @@ export async function GET(req: NextRequest) {
     );
   } catch (err) {
     console.error("DB error:", err);
+    
+    // DB 에러시 기본 호감도 반환
     return NextResponse.json(
-      { ok: false, error: String(err) },
-      { 
-        status: 500,
+      { ok: true, favor: 0, fallback: true },
+      {
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
