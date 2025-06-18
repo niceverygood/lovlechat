@@ -73,7 +73,13 @@ export async function GET(req: NextRequest) {
          ORDER BY createdAt DESC`,
         [userId, userId]
       );
-      return NextResponse.json({ ok: true, characters: rows });
+      return NextResponse.json({ ok: true, characters: rows }, {
+        headers: {
+          'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }
+      });
     } catch (err) {
       console.error("Database error:", err);
       return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
@@ -84,7 +90,13 @@ export async function GET(req: NextRequest) {
     const [rows] = await pool.query(
       "SELECT id, profileImg, name, age, job, oneLiner, attachments, firstScene, firstMessage, backgroundImg FROM character_profiles ORDER BY createdAt DESC"
     );
-    return NextResponse.json({ ok: true, characters: rows });
+    return NextResponse.json({ ok: true, characters: rows }, {
+      headers: {
+        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    });
   } catch (err) {
     console.error("Database error:", err);
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });

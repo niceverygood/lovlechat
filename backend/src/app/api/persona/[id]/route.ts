@@ -64,10 +64,20 @@ export async function DELETE(req: NextRequest, context: any) {
   const { id } = context.params;
   try {
     await pool.query("DELETE FROM user_personas WHERE id = ?", [id]);
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true }, {
+      headers: {
+        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    });
   } catch (err) {
     console.error("Database error:", err);
-    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
+      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    } });
   }
 }
 
@@ -95,9 +105,19 @@ export async function PUT(req: NextRequest, context: any) {
       `UPDATE user_personas SET name=?, avatar=?, gender=?, age=?, job=?, info=?, habit=? WHERE id=?`,
       [name, avatar, gender, age, job, info, habit, id]
     );
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true }, {
+      headers: {
+        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    });
   } catch (err) {
     console.error("Database error:", err);
-    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
+      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    } });
   }
 } 
