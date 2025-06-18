@@ -5,7 +5,7 @@ import { pool } from "@/lib/db";
 export async function GET(req: NextRequest) {
   const userId = req.nextUrl.searchParams.get('userId');
   if (!userId) return NextResponse.json({ ok: false, error: 'userId required' }, { status: 400, headers: {
-    'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   }});
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     );
     return NextResponse.json({ ok: true, personas: rows }, {
       headers: {
-        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       }
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error("Database error:", err);
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
-      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     } });
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   const data = await req.json();
   const { userId, name, avatar, gender, age, job, info, habit } = data;
   if (!userId || !name) return NextResponse.json({ ok: false, error: 'userId, name required' }, { status: 400, headers: {
-    'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   }});
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     );
     return NextResponse.json({ ok: true, id: result.insertId }, {
       headers: {
-        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       }
@@ -68,7 +68,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("Database error:", err);
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
-      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     } });
@@ -80,7 +80,7 @@ export async function OPTIONS() {
     {},
     {
       headers: {
-        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       },
