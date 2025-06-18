@@ -6,6 +6,7 @@ import ProfileDetailModal from "../components/ProfileDetailModal";
 import FavorDetailModal from "../components/FavorDetailModal";
 import Toast from "../components/Toast";
 import { API_BASE_URL } from '../lib/openai';
+import { ChatSkeleton } from "../components/Skeleton";
 
 interface Character {
   id: number;
@@ -42,6 +43,7 @@ export default function ChatPage() {
   const { messages, sendMessage, loading, favor } = useChat(id ?? "", personaId || "");
   const [input, setInput] = useState("");
   const [character, setCharacter] = useState<Character | null>(null);
+  const [characterLoading, setCharacterLoading] = useState(true);
   const [persona, setPersona] = useState<{ name: string; avatar: string }>({ name: "나", avatar: "/avatars/default-profile.png" });
   const [days, setDays] = useState(1);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -80,11 +82,14 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!id) return;
+    setCharacterLoading(true);
     fetch(`${API_BASE_URL}/api/character/${id}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok) setCharacter(data.character);
-      });
+        setCharacterLoading(false);
+      })
+      .catch(() => setCharacterLoading(false));
   }, [id]);
 
   // 메시지 영역 스크롤: 최초 진입시에는 바로, 이후에는 부드럽게
@@ -195,7 +200,9 @@ export default function ChatPage() {
     return <div style={{ padding: 40, textAlign: 'center', color: '#ff4081', fontWeight: 700 }}>멀티프로필을 먼저 선택해주세요.</div>;
   }
 
-  if (!character) return <div>로딩 중...</div>;
+  if (characterLoading || !character) {
+    return <ChatSkeleton />;
+  }
 
   if (!messages || messages.length === 0) {
     // 채팅 내역이 없을 때: 상단 캐릭터 정보/첫 장면/첫 대사만 보여주고, 메시지 영역은 비워둠
