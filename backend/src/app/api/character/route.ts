@@ -1,12 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import mysql from "mysql2/promise";
-
-const pool = mysql.createPool({
-  host: process.env.MYSQL_HOST,
-  user: process.env.MYSQL_USER,
-  password: process.env.MYSQL_PASSWORD,
-  database: process.env.MYSQL_DATABASE,
-});
+import { pool } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   const data = await req.json();
@@ -47,7 +40,7 @@ export async function POST(req: NextRequest) {
     );
     return NextResponse.json({ ok: true, id: result.insertId }, {
       headers: {
-        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       }
@@ -55,7 +48,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("Database error:", err);
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
-      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     } });
@@ -178,7 +171,7 @@ export async function OPTIONS() {
     {},
     {
       headers: {
-        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       },

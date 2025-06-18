@@ -25,7 +25,7 @@ export async function GET(req: NextRequest, context: any) {
         { 
           status: 404,
           headers: {
-            'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+            'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type, Authorization',
           }
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest, context: any) {
       { ok: true, persona },
       {
         headers: {
-          'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+          'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         }
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest, context: any) {
       { 
         status: 500,
         headers: {
-          'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+          'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         }
@@ -66,7 +66,7 @@ export async function DELETE(req: NextRequest, context: any) {
     await pool.query("DELETE FROM user_personas WHERE id = ?", [id]);
     return NextResponse.json({ ok: true }, {
       headers: {
-        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       }
@@ -74,7 +74,7 @@ export async function DELETE(req: NextRequest, context: any) {
   } catch (err) {
     console.error("Database error:", err);
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
-      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     } });
@@ -86,7 +86,7 @@ export async function OPTIONS() {
     {},
     {
       headers: {
-        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       },
@@ -107,7 +107,7 @@ export async function PUT(req: NextRequest, context: any) {
     );
     return NextResponse.json({ ok: true }, {
       headers: {
-        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       }
@@ -115,7 +115,7 @@ export async function PUT(req: NextRequest, context: any) {
   } catch (err) {
     console.error("Database error:", err);
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
-      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     } });

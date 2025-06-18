@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
       { 
         status: 400,
         headers: {
-          'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+          'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         }
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
       { 
         status: 500,
         headers: {
-          'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+          'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         }
@@ -142,7 +142,7 @@ export async function GET(req: NextRequest) {
 
   if (!personaId || !characterId) {
     return NextResponse.json({ ok: false, error: "personaId and characterId are required" }, { status: 400, headers: {
-      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     }});
@@ -163,7 +163,7 @@ export async function GET(req: NextRequest) {
     );
     const favor = Array.isArray(favorRows) && favorRows.length > 0 ? (favorRows[0] as any)?.favor : 0;
     return NextResponse.json({ ok: true, messages: rows, favor }, { headers: {
-      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     }});
@@ -172,7 +172,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       { ok: false, error: String(err) },
       { status: 500, headers: {
-        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       } }
@@ -184,7 +184,7 @@ export async function DELETE(req: NextRequest) {
   const { personaId, characterId } = await req.json();
   if (!personaId || !characterId) {
     return NextResponse.json({ ok: false, error: "personaId, characterId required" }, { status: 400, headers: {
-      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     }});
@@ -195,14 +195,14 @@ export async function DELETE(req: NextRequest) {
       [personaId, characterId]
     );
     return NextResponse.json({ ok: true }, { headers: {
-      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     }});
   } catch (err) {
     console.error("DB error:", err);
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
-      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     }});
@@ -215,7 +215,7 @@ export async function OPTIONS() {
     {},
     {
       headers: {
-        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       },
