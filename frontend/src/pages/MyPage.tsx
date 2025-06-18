@@ -8,6 +8,7 @@ import ProfileDetailModal from "../components/ProfileDetailModal";
 import { signOut } from "firebase/auth";
 import { auth } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { API_BASE_URL } from '../lib/openai';
 
 interface Character {
   id: number;
@@ -78,7 +79,7 @@ export default function MyPage() {
     console.log('================');
 
     // 멀티프로필 목록 불러오기
-    fetch(`/api/persona?userId=${userId}`)
+    fetch(`${API_BASE_URL}/api/persona?userId=${userId}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok && data.personas.length > 0) {
@@ -92,7 +93,7 @@ export default function MyPage() {
       });
 
     // 내 캐릭터 목록 불러오기
-    fetch(`/api/character?userId=${userId}`)
+    fetch(`${API_BASE_URL}/api/character?userId=${userId}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok) setCharacters(data.characters);
@@ -149,7 +150,7 @@ export default function MyPage() {
 
   // 멀티프로필 목록 최신화 함수
   const fetchPersonas = async () => {
-    const res = await fetch(`/api/persona?userId=${userId}`);
+    const res = await fetch(`${API_BASE_URL}/api/persona?userId=${userId}`);
     const data = await res.json();
     if (data.ok && data.personas.length > 0) {
       setPersonas(data.personas);
@@ -163,7 +164,7 @@ export default function MyPage() {
 
   const handleProfileSave = async (updatedProfile: Persona) => {
     try {
-      const response = await fetch(`/api/persona/${updatedProfile.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/persona/${updatedProfile.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -201,7 +202,7 @@ export default function MyPage() {
       return;
     }
     try {
-      const response = await fetch(`/api/persona`, {
+      const response = await fetch(`${API_BASE_URL}/api/persona`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -323,7 +324,7 @@ export default function MyPage() {
               style={{ color: "#ff4081", background: "none", border: "none", fontSize: 16, cursor: "pointer", marginLeft: 8 }}
               onClick={async () => {
                 if (window.confirm("정말로 삭제하시겠습니까?")) {
-                  await fetch(`/api/persona/${p.id}`, { method: "DELETE" });
+                  await fetch(`${API_BASE_URL}/api/persona/${p.id}`, { method: "DELETE" });
                   setPersonas(prev => prev.filter(x => x.id !== p.id));
                 }
               }}
@@ -359,9 +360,9 @@ export default function MyPage() {
                 style={{ color: "#ff4081", background: "none", border: "none", fontSize: 16, cursor: "pointer" }}
                 onClick={async () => {
                   if (window.confirm("정말로 삭제하시겠습니까?")) {
-                    await fetch(`/api/character/${char.id}?userId=${userId}`, { method: "DELETE" });
+                    await fetch(`${API_BASE_URL}/api/character/${char.id}?userId=${userId}`, { method: "DELETE" });
                     // 삭제(숨김) 후 목록을 서버에서 다시 fetch
-                    const res = await fetch(`/api/character?userId=${userId}`);
+                    const res = await fetch(`${API_BASE_URL}/api/character?userId=${userId}`);
                     const data = await res.json();
                     if (data.ok) setCharacters(data.characters);
                   }
@@ -574,7 +575,7 @@ export default function MyPage() {
           characterData={selectedCharacter}
           onSave={async (updated) => {
             try {
-              const response = await fetch(`/api/character/${updated.id}`, {
+              const response = await fetch(`${API_BASE_URL}/api/character/${updated.id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(updated)
@@ -592,7 +593,7 @@ export default function MyPage() {
               setShowCharacterEditModal(false);
               setSelectedCharacter(null);
               // 목록 갱신
-              const res = await fetch(`/api/character?userId=${userId}`);
+              const res = await fetch(`${API_BASE_URL}/api/character?userId=${userId}`);
               const data = await res.json();
               if (data.ok) setCharacters(data.characters);
             } catch (error: any) {

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import DefaultProfileImage from "../components/DefaultProfileImage";
 import Toast from "../components/Toast";
 import { useAuth } from "../hooks/useAuth";
+import { API_BASE_URL } from '../lib/openai';
 
 const hashtags = [
   "#소유욕", "#츤데레", "#능글남", "#집착남", "#연상남", "#질투", "#까칠남", "#다정남주", "#무심남", "#대형견남", "#잘생김", "#순정남", "#계략남", "#첫사랑", "#야한", "#상처남", "#직진남", "#집착", "#다정", "#갑을관계", "#연하남", "#인외", "#금지된사랑", "#무뚝뚝", "#소꿉친구", "#존댓말남", "#귀여움", "#다정남", "#순애", "#재벌남", "#힐링", "#싸가지", "#능글", "#로맨스코미디", "#남자", "#혐관", "#로맨스", "#까칠", "#연상", "#자캐", "#강수위", "#신분차이", "#존잘", "#미남", "#초월적존재", "#미친놈", "#학원물", "#반말", "#운명적사랑", "#햇살캐", "#여자", "#오만남", "#피폐", "#판타지", "#독점욕", "#너드", "#욕망", "#아저씨"
@@ -115,7 +116,7 @@ export default function CharacterCreatePage() {
         firstMessage,
         backgroundImg,
       };
-      const response = await fetch("/api/character", {
+      const response = await fetch(`${API_BASE_URL}/api/character`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

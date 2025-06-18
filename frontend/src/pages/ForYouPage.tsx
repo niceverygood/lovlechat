@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { FiHeart, FiPlus, FiEdit3, FiX } from "react-icons/fi";
 import ProfileEditModal from "../components/ProfileEditModal";
 import { useAuth } from "../hooks/useAuth";
+import { API_BASE_URL } from '../lib/openai';
 
 interface Character {
   id: number;
@@ -194,7 +195,7 @@ export default function ForYouPage() {
   // 좋아요한 캐릭터 목록 불러오기
   useEffect(() => {
     if (!userId) return;
-    fetch(`/api/character/favor?userId=${userId}`)
+    fetch(`${API_BASE_URL}/api/character/favor?userId=${userId}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok && Array.isArray(data.liked)) setLikedCharacters(data.liked);
@@ -241,7 +242,7 @@ export default function ForYouPage() {
   // 멀티프로필 목록 불러오기 (GET)
   useEffect(() => {
     if (!userId) return;
-    fetch(`/api/persona?userId=${userId}`)
+    fetch(`${API_BASE_URL}/api/persona?userId=${userId}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok && Array.isArray(data.personas)) setPersonas(data.personas);
@@ -251,7 +252,7 @@ export default function ForYouPage() {
   }, [userId, showPersonaManager, showPersonaCreator]);
 
   useEffect(() => {
-    fetch("/api/character")
+    fetch(`${API_BASE_URL}/api/character`)
       .then(res => res.json())
       .then(data => {
         if (data.ok) setCharacters(data.characters);
@@ -332,7 +333,7 @@ export default function ForYouPage() {
       info: creatorInfo,
       habit: creatorHabit,
     };
-    const res = await fetch("/api/persona", {
+    const res = await fetch(`${API_BASE_URL}/api/persona`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -352,7 +353,7 @@ export default function ForYouPage() {
     if (!userId) return;
     if (id === userId) return; // 기본 프로필은 삭제 불가
     if (window.confirm("정말로 삭제하시겠습니까?")) {
-      await fetch(`/api/persona/${id}`, { method: "DELETE" });
+      await fetch(`${API_BASE_URL}/api/persona/${id}`, { method: "DELETE" });
       setPersonas(prev => prev.filter(p => p.id !== id));
       if (selectedPersona === id && personas.length > 1) {
         setSelectedPersona(personas[0].id);
@@ -580,7 +581,7 @@ export default function ForYouPage() {
 
   const handleProfileSave = async (updatedProfile: any) => {
     try {
-      const response = await fetch(`/api/persona/${updatedProfile.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/persona/${updatedProfile.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -608,7 +609,7 @@ export default function ForYouPage() {
 
   const handleProfileCreate = async (newProfile: any) => {
     try {
-      const response = await fetch(`/api/persona`, {
+      const response = await fetch(`${API_BASE_URL}/api/persona`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -626,7 +627,7 @@ export default function ForYouPage() {
         setShowProfileCreateModal(false);
         setShowPersonaManager(false);
         // 목록 갱신
-        fetch(`/api/persona?userId=${userId}`)
+        fetch(`${API_BASE_URL}/api/persona?userId=${userId}`)
           .then(res => res.json())
           .then(data => { if (data.ok) setPersonas(data.personas); });
         alert('프로필이 성공적으로 생성되었습니다.');

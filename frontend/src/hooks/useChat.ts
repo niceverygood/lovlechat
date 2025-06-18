@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { API_BASE_URL } from '../lib/openai';
 
 export interface Msg {
   sender: "user" | "ai" | "system";
@@ -22,7 +23,7 @@ export function useChat(characterId: string, personaId: string) {
   // 메시지 불러오기
   useEffect(() => {
     if (!characterId || !personaId) return;
-    fetch(`/api/chat?personaId=${personaId}&characterId=${characterId}`)
+    fetch(`${API_BASE_URL}/api/chat?personaId=${personaId}&characterId=${characterId}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok) {
@@ -57,7 +58,7 @@ export function useChat(characterId: string, personaId: string) {
       };
       console.log('Sending request:', requestBody);
       
-      const response = await fetch("/api/chat", {
+      const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody),
