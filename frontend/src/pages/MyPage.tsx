@@ -71,13 +71,6 @@ export default function MyPage() {
   useEffect(() => {
     if (!userId) return; // userId가 없으면 API 호출하지 않음
 
-    // 임시 디버깅용 로그 - 계정 확인용
-    console.log('=== 계정 정보 ===');
-    console.log('Firebase UID:', userId);
-    console.log('User Email:', user?.email);
-    console.log('Display Name:', user?.displayName);
-    console.log('================');
-
     // 멀티프로필 목록 불러오기
     fetch(`${API_BASE_URL}/api/persona?userId=${userId}`)
       .then(res => res.json())
@@ -106,7 +99,7 @@ export default function MyPage() {
       setUserProfile({ name: profile.name || user?.displayName || "사용자", avatar: profile.avatar || "/imgdefault.jpg" });
     }
 
-    // 팔로워/팔로잉 수 불러오기 (임시 하드코딩, 실제 API 연동 필요)
+    // 팔로워/팔로잉 수 불러오기 (추후 실제 API 연동)
     setFollowerCount(2);
     setFollowingCount(0);
   }, [userId, user?.displayName]);

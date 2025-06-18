@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error("Database error:", err);
     
-    // DB 에러시 폴백 데이터 반환
+    // DB 연결 실패 시 폴백 데이터로 응답 (사용자 경험 보장)
     return NextResponse.json({ ok: true, personas: fallbackPersonas, fallback: true }, {
       headers: {
         'Access-Control-Allow-Origin': '*',
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("Database error:", err);
     
-    // DB 에러시 임시 ID 반환
+    // DB 연결 실패 시 임시 ID로 성공 응답 (사용자 경험 개선)
     const tempId = Date.now();
     return NextResponse.json({ ok: true, id: tempId, fallback: true }, {
       headers: {

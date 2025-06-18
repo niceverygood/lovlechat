@@ -85,11 +85,11 @@ export async function GET(req: NextRequest, context: any) {
         }
       }
     );
-  } catch (err) {
+  } catch (err: any) {
     console.error("DB error:", err);
     
-    // DB 연결 에러시 폴백 데이터 반환 (500 에러 대신)
-    if ((err as any)?.code === 'ETIMEDOUT' || (err as any)?.code === 'ECONNREFUSED' || (err as any)?.message === 'TIMEOUT') {
+    // DB 연결 실패 시 폴백 데이터로 응답 (500 에러 방지)
+    if (err?.code === 'ETIMEDOUT' || err?.code === 'ECONNREFUSED' || err?.message === 'TIMEOUT') {
       console.log("DB connection failed, returning fallback data for character:", id);
       return NextResponse.json(
         { ok: true, character: fallbackCharacter, fallback: true },
