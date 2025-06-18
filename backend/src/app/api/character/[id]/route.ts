@@ -31,7 +31,7 @@ function parseJsonSafely(jsonString: string | null): any {
 }
 
 export async function GET(req: NextRequest, context: any) {
-  const { id } = context.params;
+  const { id } = await context.params;
   
   // 기본 캐릭터 데이터 (DB 연결 실패시 폴백용)
   const fallbackCharacter = {
@@ -132,7 +132,7 @@ export async function OPTIONS() {
 }
 
 export async function PUT(req: NextRequest, context: any) {
-  const { id } = context.params;
+  const { id } = await context.params;
   const data = await req.json();
   const {
     profileImg, name, age, job, oneLiner, background, personality, habit, like, dislike,
@@ -221,7 +221,7 @@ export async function PUT(req: NextRequest, context: any) {
 }
 
 export async function DELETE(req: NextRequest, context: any) {
-  const { id } = context.params;
+  const { id } = await context.params;
   const userId = req.nextUrl.searchParams.get('userId');
   if (!userId) {
     return NextResponse.json({ ok: false, error: 'userId required' }, { status: 400, headers: {

@@ -76,31 +76,31 @@ export async function POST(req: NextRequest) {
 
   try {
     if (sender === "user") {
-      // 1. 캐릭터 정보 조회 & 유저 메시지 저장을 병렬로 실행
-      const [characterRows] = await Promise.all([
-        executeQuery(
-          "SELECT * FROM character_profiles WHERE id = ?",
-          [characterId],
-          4000
-        ),
-        executeMutation(
-          "INSERT INTO chats (personaId, characterId, message, sender) VALUES (?, ?, ?, ?)",
-          [personaId, characterId, message, sender],
-          3000
-        )
-      ]);
+      // 1. 먼저 캐릭터 정보 조회
+      const characterRows = await executeQuery(
+        "SELECT * FROM character_profiles WHERE id = ?",
+        [characterId],
+        4000
+      );
       
       if (!Array.isArray(characterRows) || characterRows.length === 0) {
         return NextResponse.json({ ok: false, error: "Character not found" }, { status: 404 });
       }
       const character = characterRows[0] as any;
 
-      // 2. 최근 대화 이력 조회 (LIMIT 5로 줄여서 성능 향상)
-      const chatHistory = await executeQuery(
-        "SELECT * FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt DESC LIMIT 5",
-        [personaId, characterId],
-        3000
-      );
+      // 2. 유저 메시지 저장 & 대화 이력 조회를 병렬로 실행
+      const [_, chatHistory] = await Promise.all([
+        executeMutation(
+          "INSERT INTO chats (personaId, characterId, message, sender, characterName, characterProfileImg, characterAge, characterJob) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          [personaId, characterId, message, sender, character.name, character.profileImg, character.age, character.job],
+          3000
+        ),
+        executeQuery(
+          "SELECT * FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt DESC LIMIT 5",
+          [personaId, characterId],
+          3000
+        )
+      ]);
 
       // 3. OpenAI 요청 준비 (메시지 간소화)
       const systemPrompt = makeSystemPrompt(character);
