@@ -20,186 +20,220 @@ export function useChat(characterId: string, personaId: string) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [favor, setFavor] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const retryCountRef = useRef(0);
+  const lastMessageIdRef = useRef<string | null>(null);
   const MAX_RETRIES = 2;
 
-  // 메시지 불러오기 (에러 핸들링 및 성능 최적화)
+  // 에러 상태 초기화
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
+  // 메시지 불러오기 최적화 (에러 처리 및 성능 강화)
   useEffect(() => {
     if (!characterId || !personaId) return;
     
     const controller = new AbortController();
+    let isMounted = true;
     
     const loadMessages = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/chat?personaId=${personaId}&characterId=${characterId}`, {
-          signal: controller.signal,
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Accept': 'application/json'
+        clearError();
+        const response = await fetch(
+          `${API_BASE_URL}/api/chat/${characterId}?personaId=${personaId}`,
+          { 
+            signal: controller.signal,
+            headers: {
+              'Cache-Control': 'no-cache',
+              'Content-Type': 'application/json'
+            }
           }
-        });
+        );
         
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          const errorText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errorText || '서버 응답 오류'}`);
         }
         
         const data = await response.json();
         
+        if (!isMounted) return;
+        
         if (data.ok) {
-          const formattedMessages = data.messages.map((msg: any) => ({
+          const formattedMessages = (data.messages || []).map((msg: any) => ({
             sender: msg.sender,
             text: msg.message,
-            avatar: msg.sender === "ai" ? `/avatars/${characterId}.jpg` : undefined,
-            timestamp: msg.createdAt
+            characterName: msg.characterName,
+            characterProfileImg: msg.characterProfileImg,
+            characterAge: msg.characterAge,
+            characterJob: msg.characterJob,
+            timestamp: msg.timestamp || msg.createdAt
           }));
           
           setMessages(formattedMessages);
-          if (typeof data.favor === "number") setFavor(data.favor);
+          setFavor(data.favor || 0);
+          
+          if (data.fallback) {
+            console.warn("채팅 데이터를 폴백으로 로드했습니다.");
+          }
         } else {
-          throw new Error(data.error || '메시지 로드 실패');
+          throw new Error(data.error || "메시지 로드에 실패했습니다.");
         }
       } catch (err: any) {
-        if (err.name !== 'AbortError') {
-          console.warn('Failed to load messages:', err.message);
-          // 폴백 처리 - 빈 상태로 시작
-          setMessages([]);
-          setFavor(0);
-        }
-      }
-    };
-    
-    loadMessages();
-    
-    return () => controller.abort();
-  }, [characterId, personaId]);
-
-  const sendMessage = useCallback(async (msg: string) => {
-    if (!msg.trim() || loading) return;
-
-    const userMessage = msg.trim();
-    setLoading(true);
-    setInput("");
-    
-    // 사용자 메시지 즉시 추가 (낙관적 업데이트)
-    const userMsgObj: Msg = { 
-      sender: "user", 
-      text: userMessage,
-      timestamp: new Date().toISOString()
-    };
-    setMessages(prev => [...prev, userMsgObj]);
-
-    try {
-      // 최근 히스토리만 포함 (성능 최적화)
-      const recentHistory = messages.slice(-3).concat([userMsgObj]);
-      const requestBody = {
-        personaId,
-        characterId,
-        message: userMessage,
-        sender: "user",
-        history: recentHistory.map(m => ({ ...m, message: m.text }))
-      };
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000); // 25초 타임아웃
-      
-      const response = await fetch(`${API_BASE_URL}/api/chat`, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Cache-Control": "no-cache",
-          "Accept": "application/json"
-        },
-        body: JSON.stringify(requestBody),
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      
-      const data = await response.json();
-
-      if (data.ok && data.aiText) {
-        const aiMsgObj: Msg = {
-          sender: "ai",
-          text: data.aiText,
-          avatar: `/avatars/${characterId}.jpg`,
-          timestamp: data.timestamp || new Date().toISOString()
-        };
+        if (err.name === 'AbortError') return;
         
-        setMessages(prev => [...prev, aiMsgObj]);
+        console.error("메시지 로드 에러:", err);
         
-        // 호감도 변화 처리 (개선된 UX)
-        if (typeof data.favorDelta === "number" && !isNaN(data.favorDelta) && data.favorDelta !== 0) {
-          setFavor(prev => prev + data.favorDelta);
-          
-          const favorEmoji = data.favorDelta > 0 ? "💝" : "💔";
-          const favorText = data.favorDelta > 0 
-            ? `호감도 ${data.favorDelta} 증가! ${favorEmoji}` 
-            : `호감도 ${Math.abs(data.favorDelta)} 감소 ${favorEmoji}`;
-            
-          setMessages(prev => [...prev, {
+        if (isMounted) {
+          setError(err.message || "메시지를 불러오는 중 오류가 발생했습니다.");
+          // 에러 발생시 기본 메시지 표시
+          setMessages([{
             sender: "system",
-            text: favorText,
-            timestamp: new Date().toISOString()
+            text: "채팅을 불러오는 중 문제가 발생했습니다. 새로고침하거나 잠시 후 다시 시도해주세요."
           }]);
         }
-        
-        retryCountRef.current = 0; // 성공시 재시도 카운트 리셋
-      } else {
-        throw new Error(data.error || "응답 생성 실패");
       }
-    } catch (error: any) {
-      console.error("Error sending message:", error);
-      
-      // 재시도 로직
-      if (retryCountRef.current < MAX_RETRIES && !error.name?.includes('Abort')) {
-        retryCountRef.current++;
-        console.log(`재시도 중... (${retryCountRef.current}/${MAX_RETRIES})`);
+    };
+
+    loadMessages();
+    
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
+  }, [characterId, personaId, clearError]);
+
+  // 메시지 전송 최적화 (재시도 로직 및 낙관적 업데이트)
+  const sendMessage = useCallback(async (message: string) => {
+    if (!message.trim() || loading) return;
+    
+    const messageText = message.trim();
+    setInput("");
+    setLoading(true);
+    clearError();
+    
+    // 낙관적 업데이트 (사용자 메시지 즉시 표시)
+    const userMessage: Msg = {
+      sender: "user",
+      text: messageText,
+      timestamp: new Date().toISOString()
+    };
+    
+    setMessages(prev => [...prev, userMessage]);
+    
+    // 재시도 로직
+    const attemptSend = async (attempt: number): Promise<void> => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/chat`, {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            'Cache-Control': 'no-cache'
+          },
+          body: JSON.stringify({
+            characterId,
+            personaId,
+            message: messageText,
+            sender: "user"
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`HTTP ${response.status}: ${errorText || '서버 응답 오류'}`);
+        }
+
+        const data = await response.json();
+
+        if (data.ok && data.aiText) {
+          const aiMessage: Msg = {
+            sender: "ai",
+            text: data.aiText,
+            timestamp: data.timestamp || new Date().toISOString()
+          };
+          
+          setMessages(prev => [...prev, aiMessage]);
+          
+          // 호감도 업데이트
+          if (data.favorDelta && data.favorDelta !== 0) {
+            setFavor(prev => Math.max(0, Math.min(100, prev + data.favorDelta)));
+          }
+          
+          retryCountRef.current = 0; // 성공시 재시도 횟수 초기화
+        } else {
+          throw new Error(data.error || "AI 응답 생성에 실패했습니다.");
+        }
+      } catch (err: any) {
+        console.error(`메시지 전송 시도 ${attempt + 1} 실패:`, err);
         
-        // 재시도 메시지 표시
-        setMessages(prev => [...prev, {
+        if (attempt < MAX_RETRIES) {
+          console.log(`재시도 중... (${attempt + 1}/${MAX_RETRIES})`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1))); // 지수 백오프
+          return attemptSend(attempt + 1);
+        }
+        
+        // 최종 실패시 에러 메시지 추가
+        const errorMessage: Msg = {
           sender: "system",
-          text: `연결을 재시도하고 있습니다... (${retryCountRef.current}/${MAX_RETRIES})`,
-          timestamp: new Date().toISOString()
-        }]);
+          text: `메시지 전송에 실패했습니다: ${err.message || '알 수 없는 오류'}. 잠시 후 다시 시도해주세요.`
+        };
         
-        // 1초 후 재시도
-        setTimeout(() => {
-          setLoading(false);
-          sendMessage(userMessage);
-        }, 1000);
-        return;
+        setMessages(prev => [...prev, errorMessage]);
+        setError(err.message || "메시지 전송에 실패했습니다.");
       }
-      
-      // 최종 실패시 폴백 응답
-      const errorMsg = error.name === 'AbortError' 
-        ? "요청 시간이 초과되었습니다. 다시 시도해주세요." 
-        : "일시적으로 응답에 문제가 있어요. 잠시 후 다시 시도해주세요.";
-        
-      setMessages(prev => [...prev, {
-        sender: "ai",
-        text: errorMsg + " 🙏",
-        avatar: `/avatars/${characterId}.jpg`,
-        timestamp: new Date().toISOString()
-      }]);
-      
-      retryCountRef.current = 0;
+    };
+
+    try {
+      await attemptSend(0);
     } finally {
       setLoading(false);
     }
-  }, [characterId, personaId, messages, loading]);
+  }, [characterId, personaId, loading, clearError]);
 
-  return { 
-    messages, 
-    input, 
-    setInput, 
-    sendMessage, 
-    setMessages, 
-    loading, 
+  // 채팅 내역 삭제 (확인 다이얼로그 포함)
+  const clearChat = useCallback(async () => {
+    if (!window.confirm("정말로 모든 채팅 내역을 삭제하시겠습니까?")) return;
+    
+    try {
+      clearError();
+      const response = await fetch(`${API_BASE_URL}/api/chat`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ personaId, characterId }),
+      });
+
+      if (response.ok) {
+        setMessages([]);
+        setFavor(0);
+      } else {
+        const errorText = await response.text();
+        throw new Error(`삭제 실패: ${errorText || '서버 오류'}`);
+      }
+    } catch (err: any) {
+      console.error("채팅 삭제 에러:", err);
+      setError(err.message || "채팅 삭제에 실패했습니다.");
+    }
+  }, [personaId, characterId, clearError]);
+
+  // 메시지 새로고침
+  const refreshMessages = useCallback(() => {
+    setMessages([]);
+    clearError();
+    // useEffect가 자동으로 다시 실행됩니다
+  }, [clearError]);
+
+  return {
+    messages,
+    input,
+    setInput,
+    sendMessage,
+    loading,
     favor,
-    isRetrying: retryCountRef.current > 0
+    error,
+    clearError,
+    clearChat,
+    refreshMessages,
+    hasError: !!error
   };
 }
