@@ -18,9 +18,19 @@ export async function GET(req: NextRequest) {
          LEFT JOIN user_personas up ON c.personaId = up.id
         ORDER BY c.createdAt DESC`
     );
-    return NextResponse.json({ ok: true, chats: rows });
+    return NextResponse.json({ ok: true, chats: rows }, {
+      headers: {
+        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    });
   } catch (err) {
     console.error("DB error:", err);
-    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
+      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    } });
   }
 } 
