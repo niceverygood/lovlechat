@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
 // POST /api/persona
 export async function POST(req: NextRequest) {
   const data = await req.json();
-  const { userId, name, avatar, gender, age, job, info, habit } = data;
+  const { userId, name, avatar, gender, age, job, info, habit, personality, interests, background } = data;
   if (!userId || !name) return NextResponse.json({ ok: false, error: 'userId, name required' }, { status: 400, headers: {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
@@ -85,8 +85,8 @@ export async function POST(req: NextRequest) {
   try {
     // 최적화된 INSERT 쿼리
     const result = await executeMutation(
-      `INSERT INTO user_personas (userId, name, avatar, gender, age, job, info, habit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [userId, name, avatar, gender, age, job, info, habit],
+      `INSERT INTO user_personas (userId, name, avatar, gender, age, job, info, habit, personality, interests, background) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userId, name, avatar || '/avatars/user.jpg', gender || '', age || '', job || '', info || '', habit || '', personality || '', interests || '', background || ''],
       6000
     );
     

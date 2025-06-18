@@ -5,30 +5,17 @@ import { RowDataPacket } from "mysql2";
 interface UserPersona extends RowDataPacket {
   id: string;
   name: string;
-  profile_image: string;
+  personality: string;
+  interests: string;
+  background: string;
   created_at: string;
   updated_at: string;
 }
 
 export async function GET(req: NextRequest, context: any) {
-  const { id } = context.params;
-  
-  // 폴백 페르소나 데이터
-  const fallbackPersona = {
-    id: id,
-    name: `페르소나 ${id}`,
-    avatar: '/avatars/user.jpg',
-    gender: '',
-    age: '',
-    job: '',
-    info: '',
-    habit: '',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString()
-  };
+  const { id } = await context.params;
   
   try {
-    // 최적화된 페르소나 조회
     const rows = await executeQuery(
       "SELECT * FROM user_personas WHERE id = ?",
       [id],
@@ -37,8 +24,8 @@ export async function GET(req: NextRequest, context: any) {
 
     if (!Array.isArray(rows) || rows.length === 0) {
       return NextResponse.json(
-        { ok: true, persona: fallbackPersona, fallback: true },
-        {
+        { ok: false, error: "Persona not found" },
+        { status: 404,
           headers: {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
@@ -62,10 +49,9 @@ export async function GET(req: NextRequest, context: any) {
   } catch (err) {
     console.error("DB error:", err);
     
-    // DB 에러시 폴백 데이터 반환
     return NextResponse.json(
-      { ok: true, persona: fallbackPersona, fallback: true },
-      {
+      { ok: false, error: "Database error" },
+      { status: 500,
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
@@ -77,10 +63,9 @@ export async function GET(req: NextRequest, context: any) {
 }
 
 export async function DELETE(req: NextRequest, context: any) {
-  const { id } = context.params;
+  const { id } = await context.params;
   
   try {
-    // 최적화된 삭제 쿼리
     await executeMutation(
       "DELETE FROM user_personas WHERE id = ?",
       [id],
@@ -97,8 +82,8 @@ export async function DELETE(req: NextRequest, context: any) {
   } catch (err) {
     console.error("Database error:", err);
     
-    // DB 에러시에도 성공으로 처리 (UX 개선)
-    return NextResponse.json({ ok: true, fallback: true }, {
+    return NextResponse.json({ ok: false, error: "Database error" }, {
+      status: 500,
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
@@ -122,17 +107,14 @@ export async function OPTIONS() {
 }
 
 export async function PUT(req: NextRequest, context: any) {
-  const { id } = context.params;
+  const { id } = await context.params;
   const data = await req.json();
-  let { name, avatar, gender, age, job, info, habit } = data;
-  // age를 숫자 또는 null로 변환
-  age = age && !isNaN(Number(age)) ? Number(age) : null;
+  const { userId, name, avatar, gender, age, job, info, habit, personality, interests, background } = data;
   
   try {
-    // 최적화된 업데이트 쿼리
     await executeMutation(
-      `UPDATE user_personas SET name=?, avatar=?, gender=?, age=?, job=?, info=?, habit=? WHERE id=?`,
-      [name, avatar, gender, age, job, info, habit, id],
+      `UPDATE user_personas SET userId=?, name=?, avatar=?, gender=?, age=?, job=?, info=?, habit=?, personality=?, interests=?, background=? WHERE id=?`,
+      [userId, name, avatar, gender, age, job, info, habit, personality, interests, background, id],
       6000
     );
     
@@ -146,8 +128,8 @@ export async function PUT(req: NextRequest, context: any) {
   } catch (err) {
     console.error("Database error:", err);
     
-    // DB 에러시에도 성공으로 처리 (UX 개선)
-    return NextResponse.json({ ok: true, fallback: true }, {
+    return NextResponse.json({ ok: false, error: "Database error" }, {
+      status: 500,
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
