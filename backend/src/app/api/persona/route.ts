@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   const { userId, name, avatar, gender, age, job, info, habit } = data;
   if (!userId || !name) return NextResponse.json({ ok: false, error: 'userId, name required' }, { status: 400 });
   try {
-    const [result] = await pool.query(
+    const [result]: any = await pool.query(
       `INSERT INTO user_personas (userId, name, avatar, gender, age, job, info, habit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [userId, name, avatar, gender, age, job, info, habit]
     );

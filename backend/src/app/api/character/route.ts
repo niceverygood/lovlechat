@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     extraInfos, gender, scope, roomCode, category, selectedTags, attachments, firstScene, firstMessage, backgroundImg
   } = data;
   try {
-    const [result] = await pool.query(
+    const [result]: any = await pool.query(
       `INSERT INTO character_profiles
         (userId, profileImg, name, age, job, oneLiner, background, personality, habit, 
          likes, dislikes, extraInfos, gender, scope, roomCode, category, tags, attachments, firstScene, firstMessage, backgroundImg, createdAt)

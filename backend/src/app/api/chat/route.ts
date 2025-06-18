@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
           model: "gpt-4o-mini",
           messages: [{ role: "user", content: favorPrompt }],
         });
-        const favorText = favorRes.choices[0].message.content.trim();
+        const favorText = favorRes.choices[0].message.content?.trim() ?? "";
         favorDelta = parseInt(favorText, 10) || 0;
         favorCheckMap[favorKey] = Math.floor(Math.random() * 5) + 1; // 다음 측정까지 남은 턴 랜덤
       }

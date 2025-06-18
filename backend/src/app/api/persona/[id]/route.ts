@@ -10,8 +10,8 @@ interface UserPersona extends RowDataPacket {
   updated_at: string;
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const { id } = await params;
+export async function GET(req: NextRequest, context: any) {
+  const { id } = context.params;
   
   try {
     const [rows] = await pool.query<UserPersona[]>(
@@ -60,8 +60,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const { id } = await params;
+export async function DELETE(req: NextRequest, context: any) {
+  const { id } = context.params;
   try {
     await pool.query("DELETE FROM user_personas WHERE id = ?", [id]);
     return NextResponse.json({ ok: true });
@@ -84,8 +84,8 @@ export async function OPTIONS() {
   );
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
-  const { id } = await params;
+export async function PUT(req: NextRequest, context: any) {
+  const { id } = context.params;
   const data = await req.json();
   let { name, avatar, gender, age, job, info, habit } = data;
   // age를 숫자 또는 null로 변환
