@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import BottomNav from "../components/BottomNav";
 import { useNavigate } from "react-router-dom";
-import { FiSettings, FiHeart } from "react-icons/fi";
+import { FiSettings } from "react-icons/fi";
 import ProfileEditModal from "../components/ProfileEditModal";
 import CharacterEditModal from "../components/CharacterEditModal";
 import ProfileDetailModal from "../components/ProfileDetailModal";
@@ -273,7 +273,7 @@ export default function MyPage() {
             aria-label="설정"
             title="설정"
           >
-            <FiSettings />
+            {typeof FiSettings === 'function' ? <FiSettings /> : null}
           </button>
         </div>
       </div>
