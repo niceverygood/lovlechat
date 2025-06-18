@@ -37,8 +37,8 @@ const pool = mysql.createPool({
   database: process.env.MYSQL_DATABASE,
 });
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const id = params.id;
+export async function GET(req: NextRequest, context: any) {
+  const { id } = context.params;
   
   try {
     const [rows] = await pool.query(
@@ -107,8 +107,8 @@ export async function OPTIONS() {
   );
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
-  const id = params.id;
+export async function PUT(req: NextRequest, context: any) {
+  const { id } = context.params;
   const data = await req.json();
   const {
     profileImg, name, age, job, oneLiner, background, personality, habit, like, dislike,
@@ -169,8 +169,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const id = params.id;
+export async function DELETE(req: NextRequest, context: any) {
+  const { id } = context.params;
   const userId = req.nextUrl.searchParams.get('userId');
   if (!userId) {
     return NextResponse.json({ ok: false, error: 'userId required' }, { status: 400 });
