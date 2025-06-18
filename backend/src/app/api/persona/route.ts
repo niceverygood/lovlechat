@@ -4,7 +4,11 @@ import { pool } from "@/lib/db";
 // GET /api/persona?userId=xxx
 export async function GET(req: NextRequest) {
   const userId = req.nextUrl.searchParams.get('userId');
-  if (!userId) return NextResponse.json({ ok: false, error: 'userId required' }, { status: 400 });
+  if (!userId) return NextResponse.json({ ok: false, error: 'userId required' }, { status: 400, headers: {
+    'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  }});
   try {
     // 기본 프로필 존재 여부 확인
     const [existRows] = await pool.query(
@@ -44,7 +48,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const data = await req.json();
   const { userId, name, avatar, gender, age, job, info, habit } = data;
-  if (!userId || !name) return NextResponse.json({ ok: false, error: 'userId, name required' }, { status: 400 });
+  if (!userId || !name) return NextResponse.json({ ok: false, error: 'userId, name required' }, { status: 400, headers: {
+    'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  }});
   try {
     const [result]: any = await pool.query(
       `INSERT INTO user_personas (userId, name, avatar, gender, age, job, info, habit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -65,4 +73,17 @@ export async function POST(req: NextRequest) {
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     } });
   }
+}
+
+export async function OPTIONS() {
+  return NextResponse.json(
+    {},
+    {
+      headers: {
+        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      },
+    }
+  );
 } 
