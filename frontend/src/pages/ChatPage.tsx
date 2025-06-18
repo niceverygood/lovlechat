@@ -5,6 +5,7 @@ import MessageBubble from "../components/MessageBubble";
 import ProfileDetailModal from "../components/ProfileDetailModal";
 import FavorDetailModal from "../components/FavorDetailModal";
 import Toast from "../components/Toast";
+import { API_BASE_URL } from '../lib/openai';
 
 interface Character {
   id: number;
@@ -79,7 +80,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!id) return;
-    fetch(`/api/character/${id}`)
+    fetch(`${API_BASE_URL}/api/character/${id}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok) setCharacter(data.character);
@@ -101,7 +102,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (personaId) {
-      fetch(`/api/persona/${personaId}`)
+      fetch(`${API_BASE_URL}/api/persona/${personaId}`)
         .then(res => res.json())
         .then(data => {
           if (data.ok) setPersona({ name: data.persona.name, avatar: data.persona.avatar });
@@ -111,7 +112,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!id || !personaId) return;
-    fetch(`/api/chat/first-date?personaId=${personaId}&characterId=${id}`)
+    fetch(`${API_BASE_URL}/api/chat/first-date?personaId=${personaId}&characterId=${id}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok && data.firstDate) {
@@ -518,7 +519,7 @@ export default function ChatPage() {
               <button style={{ flex: 1, background: '#ff4081', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 0', fontWeight: 700, fontSize: 16, cursor: 'pointer' }} onClick={async () => {
                 setShowLeaveConfirm(false);
                 // 채팅방 DB 삭제
-                await fetch('/api/chat', {
+                await fetch(`${API_BASE_URL}/api/chat`, {
                   method: 'DELETE',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ userId: personaId, characterId: id })

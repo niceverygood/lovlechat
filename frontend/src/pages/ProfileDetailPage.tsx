@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Skeleton from "../components/Skeleton";
+import { API_BASE_URL } from '../lib/openai';
 
 interface Persona {
   id: string;
@@ -23,7 +24,7 @@ export default function ProfileDetailPage() {
 
   useEffect(() => {
     if (!personaId) return;
-    fetch(`/api/persona/${personaId}`)
+    fetch(`${API_BASE_URL}/api/persona/${personaId}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok) setPersona(data.persona);
@@ -34,7 +35,7 @@ export default function ProfileDetailPage() {
   const handleDelete = async () => {
     if (!persona) return;
     if (window.confirm("정말로 삭제하시겠습니까?")) {
-      await fetch(`/api/persona/${persona.id}`, { method: "DELETE" });
+      await fetch(`${API_BASE_URL}/api/persona/${persona.id}`, { method: "DELETE" });
       alert("삭제되었습니다.");
       navigate(-1);
     }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { API_BASE_URL } from '../lib/openai';
 
 export default function ChatList() {
   const navigate = useNavigate();
@@ -14,19 +15,19 @@ export default function ChatList() {
   useEffect(() => {
     if (!user) {
       // 게스트: 더미 데이터 5개 랜덤
-      fetch(`/api/chat/dummy?count=5`)
+      fetch(`${API_BASE_URL}/api/chat/dummy?count=5`)
         .then(res => res.json())
         .then(data => {
           if (data.ok) setChats(data.chats);
         });
       setPersonas([]);
     } else {
-      fetch(`/api/chat/list?userId=${userId}`)
+      fetch(`${API_BASE_URL}/api/chat/list?userId=${userId}`)
         .then(res => res.json())
         .then(data => {
           if (data.ok) setChats(data.chats);
         });
-      fetch(`/api/persona?userId=${userId}`)
+      fetch(`${API_BASE_URL}/api/persona?userId=${userId}`)
         .then(res => res.json())
         .then(data => {
           if (data.ok) setPersonas(data.personas);
@@ -40,7 +41,7 @@ export default function ChatList() {
   // 채팅방 나가기(삭제)
   const handleLeaveChat = async (chat: any) => {
     if (!window.confirm('정말로 이 채팅방을 나가시겠습니까?')) return;
-    await fetch('/api/chat', {
+    await fetch(`${API_BASE_URL}/api/chat`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId: chat.personaId, characterId: chat.characterId })
