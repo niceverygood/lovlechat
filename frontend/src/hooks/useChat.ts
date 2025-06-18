@@ -68,14 +68,14 @@ export function useChat(characterId: string, personaId: string) {
 
       if (data.ok) {
         if (data.aiText) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              sender: "ai",
+    setMessages((prev) => [
+      ...prev,
+      {
+        sender: "ai",
               text: data.aiText,
-              avatar: `/avatars/${characterId}.jpg`,
-            },
-          ]);
+        avatar: `/avatars/${characterId}.jpg`,
+      },
+    ]);
         }
         if (typeof data.favorDelta === "number" && !isNaN(data.favorDelta) && data.favorDelta !== 0) {
           setFavor((prev) => prev + data.favorDelta);

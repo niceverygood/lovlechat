@@ -251,7 +251,7 @@ export default function MyPage() {
             onClick={() => setShowProfileDetailModal(true)}
             onError={e => {
               if (!e.currentTarget.src.endsWith("/imgdefault.jpg")) {
-                e.currentTarget.onerror = null;
+              e.currentTarget.onerror = null;
                 e.currentTarget.src = "/imgdefault.jpg";
               }
             }}
@@ -303,19 +303,19 @@ export default function MyPage() {
         {/* 멀티프로필 리스트 (기본 프로필 제외, 멀티프로필만) */}
         {personas.filter(p => p.id !== userId && p.name !== userId && p.name !== "user_74127").map((p) => (
           <div key={p.id} style={{ display: "flex", alignItems: "center", background: "var(--color-card-alt)", borderRadius: 12, padding: 12, marginBottom: 10 }}>
-            <img
-              src={p.avatar || DEFAULT_PROFILE_IMG}
-              alt={p.name}
+                <img
+                  src={p.avatar || DEFAULT_PROFILE_IMG}
+                  alt={p.name}
               style={{ width: 40, height: 40, borderRadius: "50%", marginRight: 12, objectFit: "cover", background: "#222", border: "1.5px solid #333", cursor: 'pointer' }}
               onClick={() => { setSelectedProfile(p); setShowProfileDetailModal(true); }}
-              onError={e => {
+                  onError={e => {
                 if (!e.currentTarget.src.endsWith("/imgdefault.jpg")) {
-                  e.currentTarget.onerror = null;
+                    e.currentTarget.onerror = null;
                   e.currentTarget.src = "/imgdefault.jpg";
                 }
-              }}
-            />
-            <span style={{ fontWeight: 600, fontSize: 16 }}>{p.name}</span>
+                  }}
+                />
+              <span style={{ fontWeight: 600, fontSize: 16 }}>{p.name}</span>
             <button
               style={{ marginLeft: "auto", color: "#4CAF50", background: "none", border: "none", fontSize: 16, cursor: "pointer" }}
               onClick={() => handleProfileEdit(p)}
@@ -329,9 +329,9 @@ export default function MyPage() {
                 }
               }}
             >삭제</button>
-          </div>
-        ))}
-      </div>
+            </div>
+          ))}
+        </div>
       <div style={{ padding: "0 20px", fontWeight: 700, fontSize: 18, marginTop: 24 }}>내 캐릭터</div>
       <div style={{ padding: "0 20px" }}>
         {characters.length === 0 ? (
@@ -346,7 +346,7 @@ export default function MyPage() {
                 onClick={() => navigate(`/character/${char.id}`)}
                 onError={e => {
                   if (!e.currentTarget.src.endsWith("/imgdefault.jpg")) {
-                    e.currentTarget.onerror = null;
+                  e.currentTarget.onerror = null;
                     e.currentTarget.src = "/imgdefault.jpg";
                   }
                 }}
@@ -475,7 +475,7 @@ export default function MyPage() {
           </div>
         </div>
       )}
-
+      
       {/* 설정 모달 */}
       {showSettingsModal && (
         <div style={{
@@ -600,7 +600,7 @@ export default function MyPage() {
               alert(error.message || '저장 중 오류가 발생했습니다.');
             }
           }}
-        />
+      />
       )}
 
       {/* 유저 프로필 상세 모달 */}

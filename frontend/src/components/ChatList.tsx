@@ -23,10 +23,10 @@ export default function ChatList() {
       setPersonas([]);
     } else {
       fetch(`${API_BASE_URL}/api/chat/list?userId=${userId}`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.ok) setChats(data.chats);
-        });
+      .then(res => res.json())
+      .then(data => {
+        if (data.ok) setChats(data.chats);
+      });
       fetch(`${API_BASE_URL}/api/persona?userId=${userId}`)
         .then(res => res.json())
         .then(data => {
@@ -75,11 +75,11 @@ export default function ChatList() {
         chats
           .filter(chat => user ? validPersonaIds.includes(chat.personaId?.toString()) : true)
           .map((chat) => (
-            <div
+          <div
               key={chat.characterId + '-' + chat.personaId}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
+            style={{
+              display: 'flex',
+              alignItems: 'center',
                 justifyContent: 'space-between',
                 padding: '16px 12px',
                 borderBottom: '1px solid #222',
@@ -100,14 +100,14 @@ export default function ChatList() {
                 }
                 if (!chat.personaId) return alert('이 대화는 멀티프로필 정보가 없어 진입할 수 없습니다.');
                 navigate(`/chat/${chat.characterId}?persona=${chat.personaId.toString()}`);
-              }}
-            >
-              <img
+            }}
+          >
+            <img
                 src={chat.profileImg || "/imgdefault.jpg"}
-                alt={chat.name}
+              alt={chat.name}
                 style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover' }}
                 onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = "/imgdefault.jpg"; }}
-              />
+            />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 'bold', fontSize: '1.1rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#fff' }}>{chat.name}</div>
                 <div style={{ color: '#aaa', fontSize: '0.95rem', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 200 }}>{chat.lastMessage}</div>

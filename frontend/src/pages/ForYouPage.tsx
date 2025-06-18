@@ -81,11 +81,11 @@ function CharacterDetailModal({ isOpen, onClose, character, onChatClick }: { isO
               e.currentTarget.src = DEFAULT_PROFILE_IMG;
             }}
           />
-          {/* 카테고리, by */}
+        {/* 카테고리, by */}
           <div style={{ position: 'absolute', left: 18, top: 18, display: 'flex', alignItems: 'center', gap: 10, zIndex: 2 }}>
             <span style={{ background: '#ffb3d1', color: '#fff', fontWeight: 700, fontSize: 13, borderRadius: 8, padding: '4px 10px' }}>{character.category || '카테고리 없음'}</span>
             <span style={{ color: '#fff', fontWeight: 500, fontSize: 15, opacity: 0.85 }}>by. 제작자</span>
-          </div>
+        </div>
         </div>
         {/* 프로필, 이름, 나이/직업 */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: -32, zIndex: 3, width: '100%' }}>
@@ -103,19 +103,19 @@ function CharacterDetailModal({ isOpen, onClose, character, onChatClick }: { isO
           <div style={{ fontSize: 16, color: '#ccc', marginBottom: 10 }}>{character.age}살 · {character.job}</div>
         </div>
         {/* 첫상황/첫대사 */}
-        {character.firstScene && (
+          {character.firstScene && (
           <div style={{ fontSize: 15, color: '#bbb', margin: '0 0 4px 0', textAlign: 'center', maxWidth: 320 }}>{character.firstScene}</div>
-        )}
-        {character.firstMessage && (
+          )}
+          {character.firstMessage && (
           <div style={{ fontSize: 17, color: '#fff', fontWeight: 500, background: 'rgba(255,255,255,0.08)', borderRadius: 10, padding: '8px 16px', margin: '0 0 8px 0', textAlign: 'center', maxWidth: 320 }}>{character.firstMessage}</div>
-        )}
+          )}
         {/* 태그 */}
         {character.selectedTags && character.selectedTags.length > 0 && (
           <div style={{ padding: '8px 20px 0 20px', display: 'flex', gap: 8, flexWrap: 'wrap', width: '100%' }}>
             {character.selectedTags.map((tag: string) => (
               <span key={tag} style={{ background: '#ffd6ea', color: '#ff4081', borderRadius: 8, padding: '4px 10px', fontWeight: 600, fontSize: 14 }}>#{tag}</span>
             ))}
-          </div>
+        </div>
         )}
         {/* 탭 */}
         <div style={{ display: 'flex', margin: '24px 0 0 0', borderBottom: '1.5px solid #f5b3d7', width: '100%' }}>
@@ -399,44 +399,44 @@ export default function ForYouPage() {
       p => p.id !== userId && p.name !== userId
     );
     return (
-      <div style={{
+    <div style={{
         position: "fixed", left: 0, top: 0, width: "100vw", height: "100vh", background: "rgba(20,20,20,0.98)", zIndex: 2000, display: "flex", flexDirection: "column", alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ width: '100%', maxWidth: 430, background: '#18171a', borderRadius: 18, boxShadow: '0 2px 16px #0005', minHeight: 480, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}>
           <div style={{ display: "flex", alignItems: "center", padding: "18px 20px 10px 20px", borderBottom: "1px solid #222", justifyContent: 'space-between', borderTopLeftRadius: 18, borderTopRightRadius: 18 }}>
             <div style={{ display: 'flex', alignItems: 'center' }}>
-              <button onClick={() => setShowPersonaManager(false)} style={{ background: "none", border: "none", fontSize: 26, marginRight: 8, cursor: "pointer", color: "#fff" }}>&larr;</button>
+        <button onClick={() => setShowPersonaManager(false)} style={{ background: "none", border: "none", fontSize: 26, marginRight: 8, cursor: "pointer", color: "#fff" }}>&larr;</button>
               <span style={{ fontWeight: 700, fontSize: 22, color: '#fff' }}>멀티프로필</span>
-            </div>
-            <button
+      </div>
+        <button
               onClick={() => setShowProfileCreateModal(true)}
               disabled={managedPersonas.length >= 10}
               style={{ display: "flex", alignItems: "center", background: "none", border: "none", color: managedPersonas.length >= 10 ? "#888" : "#ff4081", fontWeight: 600, fontSize: 18, cursor: managedPersonas.length >= 10 ? "not-allowed" : "pointer" }}
               title={managedPersonas.length >= 10 ? '최대 10개까지 생성할 수 있습니다.' : ''}
-            >
+        >
               <span style={{ fontSize: 26, marginRight: 4 }}>+</span> 만들기 ({managedPersonas.length}/10)
-            </button>
+        </button>
           </div>
           <div style={{ padding: 24 }}>
             {managedPersonas.length === 0 && (
-              <div style={{ color: "#bbb", fontSize: 16, marginTop: 40 }}>아직 등록된 프로필이 없습니다.</div>
-            )}
+          <div style={{ color: "#bbb", fontSize: 16, marginTop: 40 }}>아직 등록된 프로필이 없습니다.</div>
+        )}
             {managedPersonas.map(p => (
               <div key={p.id} style={{ display: "flex", alignItems: "center", background: "#232124", borderRadius: 16, padding: '18px 16px', marginBottom: 18, boxShadow: '0 2px 8px #0002', minHeight: 68 }}>
-                <img
+            <img
                   src={p.avatar || "/imgdefault.jpg"}
-                  alt={p.name}
+              alt={p.name}
                   style={{ width: 54, height: 54, borderRadius: "50%", marginRight: 18, objectFit: "cover", boxShadow: '0 2px 8px #0002' }}
                   onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = "/imgdefault.jpg"; }}
-                />
+            />
                 <span style={{ fontWeight: 700, fontSize: 19, color: '#fff' }}>{p.name}</span>
                 <button onClick={() => handleProfileEdit(p)} style={{ marginLeft: "auto", background: "none", border: "none", color: "#ff4081", fontSize: 18, fontWeight: 600, cursor: "pointer", padding: '0 8px' }}>수정</button>
                 <button onClick={() => handleDeletePersona(p.id)} style={{ background: "none", border: "none", color: "#ff4081", fontSize: 26, fontWeight: 700, cursor: "pointer", padding: '0 4px' }}>✕</button>
-              </div>
-            ))}
           </div>
-        </div>
+        ))}
+          </div>
       </div>
-    );
+    </div>
+  );
   };
 
   // 멀티프로필 생성 폼 전체화면
@@ -701,42 +701,42 @@ export default function ForYouPage() {
             onError={e => { if (!e.currentTarget.src.endsWith(DEFAULT_PROFILE_IMG)) { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_PROFILE_IMG; } }}
           />
           {/* 상단 정보 */}
-          <div style={{
+            <div style={{
             position: "absolute", top: 28, left: 24, zIndex: 3, color: "#fff", textAlign: "left", display: "flex", alignItems: "center"
           }}>
-            <img
-              src={characters[index].profileImg || DEFAULT_PROFILE_IMG}
-              alt={characters[index].name}
+              <img
+                src={characters[index].profileImg || DEFAULT_PROFILE_IMG}
+                alt={characters[index].name}
               style={{ width: 48, height: 48, borderRadius: "50%", border: "2px solid #fff", objectFit: "cover", background: "#eee", marginRight: 14, cursor: 'pointer' }}
               onClick={() => handleCardClick(characters[index].id)}
               onError={e => { if (!e.currentTarget.src.endsWith(DEFAULT_PROFILE_IMG)) { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_PROFILE_IMG; } }}
-            />
+              />
             <div>
               <div style={{ fontWeight: 700, fontSize: 20 }}>{characters[index].name}</div>
               <div style={{ fontSize: 15, opacity: 0.85 }}>{characters[index].age ? characters[index].age : "-"} | {characters[index].job || "-"}</div>
             </div>
           </div>
           {/* 첫상황설명 */}
-          {characters[index].firstScene && (
+              {characters[index].firstScene && (
             <div style={{
               position: "absolute", top: 90, left: 24, right: 24, color: "#fff",
               background: "rgba(0,0,0,0.35)", borderRadius: 12, padding: "12px 16px",
               fontSize: 15, fontWeight: 400, lineHeight: 1.5, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", zIndex: 3,
               textAlign: 'center'
             }}>
-              {characters[index].firstScene}
-            </div>
-          )}
+                  {characters[index].firstScene}
+                </div>
+              )}
           {/* 첫대사(말풍선) - 첫상황 바로 아래 중앙 정렬 */}
-          {characters[index].firstMessage && (
+              {characters[index].firstMessage && (
             <div style={{
               position: "absolute", left: '50%', top: 150, transform: 'translateX(-50%)', background: "#8888", color: "#fff",
               borderRadius: 22, padding: "12px 24px", fontSize: 16, fontWeight: 500, maxWidth: 260, zIndex: 3,
               textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.10)'
             }}>
-              {characters[index].firstMessage}
-            </div>
-          )}
+                  {characters[index].firstMessage}
+                </div>
+              )}
           {/* 하트/제작자 */}
           <div style={{
             position: "absolute", right: 24, bottom: 90, display: "flex", flexDirection: "column", alignItems: "center", zIndex: 3
@@ -748,10 +748,10 @@ export default function ForYouPage() {
             >{likedCharacters.includes(characters[index].id) ? '♥' : '♡'}</span>
             <img src={characters[index].profileImg || DEFAULT_PROFILE_IMG} alt="제작자" style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", background: "#eee" }} onError={e => { if (!e.currentTarget.src.endsWith(DEFAULT_PROFILE_IMG)) { e.currentTarget.onerror = null; e.currentTarget.src = DEFAULT_PROFILE_IMG; } }} />
             <div style={{ color: "#fff", fontSize: 13, marginTop: 2 }}>제작자</div>
-          </div>
+            </div>
           {/* 채팅 시작하기 버튼 */}
-          <button
-            style={{
+            <button
+              style={{
               position: "absolute", left: 24, right: 24, bottom: 24, height: 54,
               background: "#ff4081", color: "#fff", border: "none", borderRadius: 28,
               fontWeight: 700, fontSize: 20, boxShadow: "0 2px 8px #ff408155", cursor: "pointer", zIndex: 4
@@ -765,7 +765,7 @@ export default function ForYouPage() {
               position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", zIndex: 10,
               width: 44, height: 44, borderRadius: "50%", background: "rgba(0,0,0,0.32)", border: "none",
               display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, color: "#fff", boxShadow: "0 2px 8px rgba(0,0,0,0.18)", cursor: "pointer", transition: "background 0.2s"
-            }}
+              }}
             aria-label="이전 캐릭터"
             onMouseOver={e => e.currentTarget.style.background = "rgba(0,0,0,0.5)"}
             onMouseOut={e => e.currentTarget.style.background = "rgba(0,0,0,0.32)"}
@@ -794,24 +794,24 @@ export default function ForYouPage() {
           position: "fixed", left: 0, top: 0, width: "100vw", height: "100vh", background: "#111", zIndex: 1500, display: "flex", flexDirection: "column", alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ width: '100%', maxWidth: 420, background: '#18171a', borderRadius: 18, boxShadow: '0 2px 16px #0005', minHeight: 480, display: 'flex', flexDirection: 'column', justifyContent: 'flex-start' }}>
             <div style={{ display: "flex", alignItems: "center", padding: "16px 16px 10px 16px", borderBottom: "1px solid #222", background: '#111', position: 'sticky', top: 0, zIndex: 2 }}>
-              <button onClick={() => setShowPersonaModal(false)} style={{ background: "none", border: "none", fontSize: 26, marginRight: 8, cursor: "pointer", color: "#fff" }}>&larr;</button>
+            <button onClick={() => setShowPersonaModal(false)} style={{ background: "none", border: "none", fontSize: 26, marginRight: 8, cursor: "pointer", color: "#fff" }}>&larr;</button>
               <span style={{ fontWeight: 700, fontSize: 22, color: "#fff" }}>채팅 프로필</span>
-            </div>
+          </div>
             <div style={{ padding: 18, flex: 1, overflowY: "auto" }}>
               <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 8, color: "#fff" }}>멀티프로필</div>
               <div style={{ color: "#bbb", fontSize: 14, marginBottom: 18 }}>직업과 기본 정보를 추가 지원합니다</div>
               {multiPersonas.map(p => (
                 <div key={p.id} style={{ display: "flex", alignItems: "center", background: selectedPersona === p.id ? "#2a1a22" : "#18171a", borderRadius: 18, padding: '20px 16px', marginBottom: 18, cursor: "pointer", minHeight: 72, boxShadow: selectedPersona === p.id ? '0 2px 12px #ff408122' : 'none', transition: 'background 0.2s' }} onClick={() => setSelectedPersona(p.id)}>
-                  <img
+                <img
                     src={p.avatar || "/imgdefault.jpg"}
-                    alt={p.name}
+                  alt={p.name}
                     style={{ width: 56, height: 56, borderRadius: "50%", marginRight: 18, objectFit: "cover", boxShadow: '0 2px 8px #0002' }}
                     onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = "/imgdefault.jpg"; }}
-                  />
+                />
                   <span style={{ fontWeight: 700, fontSize: 20, color: "#fff", letterSpacing: 0.5 }}>{p.name}</span>
                   {selectedPersona === p.id && <span style={{ marginLeft: "auto", color: "#ff4081", fontSize: 32, fontWeight: 900 }}>✔️</span>}
-                </div>
-              ))}
+              </div>
+            ))}
               {multiPersonas.length === 0 && (
                 <div style={{ color: '#ff4081', fontWeight: 600, fontSize: 16, margin: '32px 0', textAlign: 'center' }}>멀티프로필을 먼저 생성해주세요.</div>
               )}

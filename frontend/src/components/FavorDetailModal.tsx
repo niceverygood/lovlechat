@@ -41,7 +41,7 @@ export default function FavorDetailModal({
       <div style={{
         background: '#fff', borderRadius: 24, boxShadow: '0 4px 32px rgba(0,0,0,0.10)',
         width: '100%', maxWidth: 430, minHeight: 540, margin: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 0 32px 0', position: 'relative'
-      }}>
+    }}>
         <button onClick={onClose} style={{ position: "absolute", left: 24, top: 24, background: "none", border: "none", fontSize: 28, color: "#888", cursor: 'pointer' }}>&larr;</button>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 32, marginTop: 16 }}>
           <img src={character.avatar || "/imgdefault.jpg"} alt={character.name} style={{ width: 80, height: 80, borderRadius: "50%", objectFit: "cover", border: "3px solid #fff" }} onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = "/imgdefault.jpg"; }} />

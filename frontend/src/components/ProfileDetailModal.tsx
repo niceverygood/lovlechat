@@ -110,12 +110,12 @@ export default function ProfileDetailModal({ isOpen, onClose, profile, editMode 
         {/* 프로필 헤더 */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <img
+          <img
               src={profile.avatar || "/imgdefault.jpg"}
-              alt={profile.name}
+            alt={profile.name}
               style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid #eee' }}
               onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = '/imgdefault.jpg'; }}
-            />
+          />
             <div>
               <div style={{ fontWeight: 700, fontSize: 22, marginBottom: 2 }}>{profile.name}</div>
               <div style={{ color: '#888', fontSize: 15 }}>
@@ -142,8 +142,8 @@ export default function ProfileDetailModal({ isOpen, onClose, profile, editMode 
                 <div style={{ padding: '12px 14px 14px 14px' }}>
                   <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 2 }}>{char.name}</div>
                   <div style={{ color: '#888', fontSize: 14 }}>{char.age ? `${char.age}세` : ''}{char.age && char.job ? ' · ' : ''}{char.job || ''}</div>
-                </div>
-              </div>
+            </div>
+            </div>
             ))
           )}
         </div>

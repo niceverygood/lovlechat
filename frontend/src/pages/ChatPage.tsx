@@ -358,7 +358,7 @@ export default function ChatPage() {
         {character?.firstMessage && (
           <div style={{ color: "#ff4081", fontSize: 16, textAlign: "center", margin: "8px 0 16px 0", whiteSpace: "pre-line" }}>
             <b>첫 대사</b><br />{character.firstMessage}
-          </div>
+        </div>
         )}
         {/* 메시지 리스트 */}
         {messages.map((msg, idx) => (
