@@ -84,6 +84,38 @@ export default function CharacterCreatePage() {
   const handleRemoveBackgroundImg = () => setBackgroundImg(null);
 
   const handleSubmit = async () => {
+    if (!profileImg) {
+      setToast({ message: "프로필 사진을 추가해주세요.", type: "error" });
+      return;
+    }
+    if (!name.trim()) {
+      setToast({ message: "캐릭터 이름을 입력해주세요.", type: "error" });
+      return;
+    }
+    if (name.trim().length < 2) {
+      setToast({ message: "캐릭터 이름은 2글자 이상이어야 합니다.", type: "error" });
+      return;
+    }
+    if (!age || parseInt(age) < 1 || parseInt(age) > 150) {
+      setToast({ message: "나이를 올바르게 입력해주세요. (1-150세)", type: "error" });
+      return;
+    }
+    if (!job.trim()) {
+      setToast({ message: "직업을 입력해주세요.", type: "error" });
+      return;
+    }
+    if (!oneLiner.trim()) {
+      setToast({ message: "캐릭터 한 마디를 입력해주세요.", type: "error" });
+      return;
+    }
+    if (!background.trim()) {
+      setToast({ message: "캐릭터 배경을 입력해주세요.", type: "error" });
+      return;
+    }
+    if (!personality.trim()) {
+      setToast({ message: "성격을 입력해주세요.", type: "error" });
+      return;
+    }
     if (!firstScene.trim()) {
       setToast({ message: "첫 상황을 입력해주세요.", type: "error" });
       return;
@@ -92,45 +124,74 @@ export default function CharacterCreatePage() {
       setToast({ message: "채팅 첫 마디를 입력해주세요.", type: "error" });
       return;
     }
+    
     setLoading(true);
+    
     try {
       const payload = {
         userId: user?.uid || "",
         profileImg,
-        name,
-        age,
-        job,
-        oneLiner,
-        background,
-        personality,
-        habit,
-        like,
-        dislike,
-        extraInfos,
+        name: name.trim(),
+        age: parseInt(age),
+        job: job.trim(),
+        oneLiner: oneLiner.trim(),
+        background: background.trim(),
+        personality: personality.trim(),
+        habit: habit.trim(),
+        like: like.trim(),
+        dislike: dislike.trim(),
+        extraInfos: extraInfos.filter(info => info.trim()),
         gender,
         scope,
-        roomCode,
+        roomCode: roomCode.trim(),
         category,
         selectedTags,
-        firstScene,
-        firstMessage,
+        firstScene: firstScene.trim(),
+        firstMessage: firstMessage.trim(),
         backgroundImg,
       };
+      
       const response = await fetch(`${API_BASE_URL}/api/character`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
         body: JSON.stringify(payload),
       });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
       const data = await response.json();
-      setLoading(false);
+      
       if (data.ok && data.id) {
+        if (data.message) {
+          setToast({ message: data.message, type: "success" });
+        }
+        
+        if (data.fallback) {
+          setToast({ 
+            message: "캐릭터가 임시 저장되었습니다. 잠시 후 다시 확인해주세요.", 
+            type: "success" 
+          });
+        }
+        
         setShowSuccessModal({ id: data.id.toString() });
       } else {
-        setToast({ message: "캐릭터 저장에 실패했습니다: " + (data.error || ''), type: "error" });
+        throw new Error(data.error || '캐릭터 생성에 실패했습니다.');
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Character creation error:', error);
+      
+      const errorMessage = error.message?.includes('HTTP') 
+        ? "서버 연결에 문제가 있습니다. 잠시 후 다시 시도해주세요."
+        : error.message || "캐릭터 저장 중 오류가 발생했습니다.";
+        
+      setToast({ message: errorMessage, type: "error" });
+    } finally {
       setLoading(false);
-      setToast({ message: "캐릭터 저장 중 오류가 발생했습니다.", type: "error" });
     }
   };
 

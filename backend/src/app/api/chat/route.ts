@@ -59,10 +59,11 @@ export async function POST(req: NextRequest) {
   
   let { userId, characterId, message, sender, history, personaId } = body;
   
-  if (!personaId || !characterId || !message || !sender) {
+  // 필수 필드 검증 강화
+  if (!personaId?.toString().trim() || !characterId?.toString().trim() || !message?.trim() || !sender) {
     console.log('Missing fields:', { personaId, characterId, message, sender });
     return NextResponse.json(
-      { ok: false, error: "Missing personaId, characterId, message, or sender" },
+      { ok: false, error: "personaId, characterId, message, sender는 모두 필수입니다." },
       { 
         status: 400,
         headers: {
@@ -74,74 +75,94 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // 데이터 정규화
+  const normalizedData = {
+    personaId: String(personaId).trim(),
+    characterId: String(characterId).trim(),
+    message: String(message).trim().slice(0, 1000), // 메시지 길이 제한
+    sender: String(sender).trim()
+  };
+
   try {
-    if (sender === "user") {
-      // 1. 먼저 캐릭터 정보 조회
+    if (normalizedData.sender === "user") {
+      // 1. 캐릭터 정보 조회 (캐시 활용 고려)
       const characterRows = await executeQuery(
-        "SELECT * FROM character_profiles WHERE id = ?",
-        [characterId],
-        4000
+        "SELECT id, name, profileImg, age, job, personality, background, firstMessage FROM character_profiles WHERE id = ?",
+        [normalizedData.characterId],
+        3000 // 타임아웃 단축 (4초 → 3초)
       );
       
       if (!Array.isArray(characterRows) || characterRows.length === 0) {
-        return NextResponse.json({ ok: false, error: "Character not found" }, { status: 404 });
+        return NextResponse.json({ 
+          ok: false, 
+          error: "캐릭터를 찾을 수 없습니다." 
+        }, { 
+          status: 404,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          }
+        });
       }
       const character = characterRows[0] as any;
 
-      // 2. 유저 메시지 저장 & 대화 이력 조회를 병렬로 실행
+      // 2. 유저 메시지 저장 & 대화 이력 조회를 병렬로 실행 (최적화)
       const [_, chatHistory] = await Promise.all([
         executeMutation(
           "INSERT INTO chats (personaId, characterId, message, sender, characterName, characterProfileImg, characterAge, characterJob) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-          [personaId, characterId, message, sender, character.name, character.profileImg, character.age, character.job],
-          3000
+          [normalizedData.personaId, normalizedData.characterId, normalizedData.message, normalizedData.sender, character.name, character.profileImg, character.age, character.job],
+          2500 // 타임아웃 단축 (3초 → 2.5초)
         ),
         executeQuery(
-          "SELECT * FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt DESC LIMIT 5",
-          [personaId, characterId],
-          3000
+          "SELECT message, sender FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt DESC LIMIT 4",
+          [normalizedData.personaId, normalizedData.characterId],
+          2500 // 타임아웃 단축, 메시지 수 줄임 (5개 → 4개)
         )
       ]);
 
-      // 3. OpenAI 요청 준비 (메시지 간소화)
+      // 3. OpenAI 요청 준비 (시스템 프롬프트 최적화)
       const systemPrompt = makeSystemPrompt(character);
       const messages: OpenAI.ChatCompletionMessageParam[] = [
         { role: "system", content: systemPrompt },
         ...chatHistory.reverse().map((msg: any) => ({
           role: msg.sender === "user" ? "user" : "assistant" as "user" | "assistant",
-          content: String(msg.message),
+          content: String(msg.message).slice(0, 500), // 히스토리 메시지 길이 제한
         })),
-        { role: "user", content: String(message) },
+        { role: "user", content: normalizedData.message },
       ];
 
-      // 4. OpenAI 답변 생성 (최적화된 설정)
+      // 4. OpenAI 답변 생성 (더욱 최적화된 설정)
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages,
-        max_tokens: 150, // 응답 길이 제한으로 속도 향상
-        temperature: 0.8, // 적당한 창의성
+        max_tokens: 120, // 응답 길이 더 단축 (150 → 120)
+        temperature: 0.7, // 창의성 약간 줄임 (0.8 → 0.7)
+        top_p: 0.9, // 응답 품질 향상
+        frequency_penalty: 0.3, // 반복 줄임
       });
 
       const aiText = completion.choices[0].message.content || "죄송해요, 응답을 생성할 수 없어요.";
 
-      // 5. AI 메시지 저장 & 호감도 처리를 병렬로 실행
-      const favorKey = `${personaId}_${characterId}`;
+      // 5. AI 메시지 저장 & 호감도 처리 최적화
+      const favorKey = `${normalizedData.personaId}_${normalizedData.characterId}`;
       let favorDelta = 0;
 
-      // 호감도 계산 (확률적 처리)
-      if (!(favorKey in favorCheckMap)) favorCheckMap[favorKey] = Math.floor(Math.random() * 3) + 1;
+      // 호감도 계산 (확률 조정으로 DB 부하 줄임)
+      if (!(favorKey in favorCheckMap)) favorCheckMap[favorKey] = Math.floor(Math.random() * 4) + 2; // 2-5회
       favorCheckMap[favorKey]--;
       
-      if (favorCheckMap[favorKey] <= 0 && Math.random() > 0.7) { // 30% 확률로만 호감도 계산
-        favorDelta = Math.floor(Math.random() * 21) - 10; // -10 ~ +10
-        favorCheckMap[favorKey] = Math.floor(Math.random() * 3) + 1;
+      if (favorCheckMap[favorKey] <= 0 && Math.random() > 0.75) { // 25% 확률로 감소 (30% → 25%)
+        favorDelta = Math.floor(Math.random() * 15) - 7; // -7 ~ +7 (범위 축소)
+        favorCheckMap[favorKey] = Math.floor(Math.random() * 4) + 2;
       }
 
-      // 6. AI 메시지 저장 & 호감도 업데이트 병렬 실행
+      // 6. AI 메시지 저장 & 호감도 업데이트 병렬 실행 (타임아웃 최적화)
       const savePromises = [
         executeMutation(
           "INSERT INTO chats (personaId, characterId, message, sender, characterName, characterProfileImg, characterAge, characterJob) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-          [personaId, characterId, aiText, "ai", character.name, character.profileImg, character.age, character.job],
-          3000
+          [normalizedData.personaId, normalizedData.characterId, aiText, "ai", character.name, character.profileImg, character.age, character.job],
+          2000 // 타임아웃 단축 (3초 → 2초)
         )
       ];
 
@@ -149,9 +170,12 @@ export async function POST(req: NextRequest) {
         savePromises.push(
           executeMutation(
             `INSERT INTO character_favors (personaId, characterId, favor) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE favor = favor + VALUES(favor)`,
-            [personaId, characterId, favorDelta],
-            2000
-          ).catch(err => console.log("Favor update failed:", err))
+            [normalizedData.personaId, normalizedData.characterId, favorDelta],
+            1500 // 타임아웃 단축 (2초 → 1.5초)
+          ).catch(err => {
+            console.log("Favor update failed (non-critical):", err.message);
+            return null; // 호감도 실패는 치명적이지 않음
+          })
         );
       }
 
@@ -160,7 +184,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ 
         ok: true, 
         aiText, 
-        favorDelta 
+        favorDelta,
+        timestamp: new Date().toISOString()
       }, {
         headers: {
           'Access-Control-Allow-Origin': '*',
@@ -169,20 +194,21 @@ export async function POST(req: NextRequest) {
         }
       });
     } else {
-      // sender가 ai로 직접 오는 경우
-      return NextResponse.json({ ok: true });
+      // sender가 ai로 직접 오는 경우 (빠른 처리)
+      return NextResponse.json({ ok: true, message: "AI 메시지 처리 완료" });
     }
   } catch (err) {
     console.error("Chat API error:", err);
     
-    // DB 에러시 기본 AI 응답 반환
-    if (sender === "user") {
-      const fallbackResponse = "죄송해요, 일시적으로 연결에 문제가 있어요. 잠시 후 다시 시도해주세요.";
+    // DB 에러시 향상된 폴백 응답
+    if (normalizedData.sender === "user") {
+      const fallbackResponse = "죄송해요, 일시적으로 연결에 문제가 있어요. 잠시 후 다시 시도해주세요. 🙏";
       return NextResponse.json({ 
         ok: true, 
         aiText: fallbackResponse, 
         favorDelta: 0, 
-        fallback: true 
+        fallback: true,
+        timestamp: new Date().toISOString()
       }, {
         headers: {
           'Access-Control-Allow-Origin': '*',
@@ -191,7 +217,11 @@ export async function POST(req: NextRequest) {
         }
       });
     } else {
-      return NextResponse.json({ ok: true, fallback: true });
+      return NextResponse.json({ 
+        ok: true, 
+        fallback: true,
+        message: "처리 중 오류가 발생했지만 복구되었습니다."
+      });
     }
   }
 }
