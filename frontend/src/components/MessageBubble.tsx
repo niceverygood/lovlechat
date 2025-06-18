@@ -57,24 +57,24 @@ export default function MessageBubble({ message, onProfileClick }: Props) {
           boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
         }}>{message.text}</div>
       ) : (
-        <div
-          style={{
-            maxWidth: 320,
-            padding: isUser ? '13px 18px' : '13px 18px',
-            borderRadius: 18,
+      <div
+        style={{
+          maxWidth: 320,
+          padding: isUser ? '13px 18px' : '13px 18px',
+          borderRadius: 18,
             background: isUser ? '#ff4081' : 'rgba(255,255,255,0.08)',
-            color: isUser ? '#fff' : '#fff',
-            fontSize: 17,
-            fontWeight: 400,
-            marginLeft: isUser ? 0 : 4,
-            marginRight: isUser ? 4 : 0,
-            boxShadow: isUser ? '0 2px 8px rgba(255,64,129,0.08)' : '0 2px 8px rgba(0,0,0,0.10)',
-            border: isUser ? 'none' : '1.5px solid #fff2',
-            wordBreak: 'break-word',
-          }}
-        >
-          {message.text}
-        </div>
+          color: isUser ? '#fff' : '#fff',
+          fontSize: 17,
+          fontWeight: 400,
+          marginLeft: isUser ? 0 : 4,
+          marginRight: isUser ? 4 : 0,
+          boxShadow: isUser ? '0 2px 8px rgba(255,64,129,0.08)' : '0 2px 8px rgba(0,0,0,0.10)',
+          border: isUser ? 'none' : '1.5px solid #fff2',
+          wordBreak: 'break-word',
+        }}
+      >
+        {message.text}
+      </div>
       )}
     </div>
   );

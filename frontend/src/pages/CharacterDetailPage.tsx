@@ -110,12 +110,12 @@ export default function CharacterDetailPage() {
         <button onClick={() => navigate(-1)} style={{ position: 'absolute', left: 16, top: 16, background: 'none', border: 'none', color: '#fff', fontSize: 28, zIndex: 2 }}>&larr;</button>
         {/* 프로필/이름/나이/직업 오버레이 */}
         <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: '0 0 32px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2 }}>
-          <img
-            src={character.profileImg || "/imgdefault.jpg"}
-            alt={character.name}
+        <img
+          src={character.profileImg || "/imgdefault.jpg"}
+          alt={character.name}
             style={{ width: 92, height: 92, borderRadius: "50%", border: "3px solid #fff", objectFit: "cover", background: "#eee", marginBottom: 12 }}
-            onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = "/imgdefault.jpg"; }}
-          />
+          onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = "/imgdefault.jpg"; }}
+        />
           <div style={{ fontWeight: 700, fontSize: 24, color: '#fff', marginBottom: 4, textShadow: '0 2px 8px rgba(0,0,0,0.25)' }}>{character.name}</div>
           <div style={{ fontWeight: 400, fontSize: 16, color: '#fff', opacity: 0.92, textShadow: '0 2px 8px rgba(0,0,0,0.18)' }}>{character.age ? `${character.age}살` : "나이 비공개"} · {character.job || "직업 비공개"}</div>
         </div>
@@ -126,7 +126,7 @@ export default function CharacterDetailPage() {
         <div style={{ fontWeight: 700, fontSize: 20, color: '#fff', marginBottom: 8 }}>첫상황</div>
         <div style={{ background: '#ffd6ea', color: '#ef4e8b', borderRadius: 18, padding: '24px 0', fontWeight: 600, fontSize: 22, textAlign: 'center', marginBottom: 28 }}>
           {character.firstScene || <span style={{ color: '#bbb', fontWeight: 400, fontSize: 18 }}>등록된 첫상황이 없습니다.</span>}
-        </div>
+      </div>
         {/* 첫대사 */}
         <div style={{ fontWeight: 700, fontSize: 20, color: '#fff', marginBottom: 8 }}>첫대사</div>
         <div style={{ background: '#ffd6ea', color: '#ef4e8b', borderRadius: 18, padding: '24px 0', fontWeight: 600, fontSize: 22, textAlign: 'center', marginBottom: 28 }}>
@@ -232,21 +232,21 @@ export default function CharacterDetailPage() {
               <div style={{ color: '#ff4081', fontWeight: 600, fontSize: 16, margin: '24px 0', textAlign: 'center' }}>멀티프로필을 먼저 생성해주세요.</div>
             )}
             {personas.length > 0 && (
-              <button 
-                onClick={handleStartChat}
-                style={{
-                  width: "100%",
-                  background: "#ff4081",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 12,
+            <button 
+              onClick={handleStartChat}
+              style={{
+                width: "100%",
+                background: "#ff4081",
+                color: "#fff",
+                border: "none",
+                borderRadius: 12,
                   padding: 16,
-                  fontWeight: 700,
-                  fontSize: 18,
+                fontWeight: 700,
+                fontSize: 18,
                   marginTop: 8,
                   boxShadow: '0 2px 8px #ff408133',
-                  cursor: "pointer"
-                }}
+                cursor: "pointer"
+              }}
               >채팅하기</button>
             )}
           </div>
