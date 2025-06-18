@@ -95,7 +95,7 @@ export default function FavorDetailModal({
           {selectedStage.require > 0 && (
             <div style={{ color: "#ff4081", fontWeight: 700, fontSize: 16, marginBottom: 12 }}>💗 호감도 {selectedStage.require}</div>
           )}
-          <button style={{ marginTop: 12, background: "#ffe3ef", color: "#ff4081", border: "none", borderRadius: 16, padding: "12px 32px", fontWeight: 700, fontSize: 18, opacity: 0.5 }} disabled>축하 카드</button>
+          <button style={{ marginTop: 12, background: "#ffe3ef", color: "#ff4081", border: "none", borderRadius: 16, padding: "12px 32px", fontWeight: 700, fontSize: 18, opacity: 0.5 }} disabled>축하 카드 (준비중)</button>
         </div>
       </div>
     </div>

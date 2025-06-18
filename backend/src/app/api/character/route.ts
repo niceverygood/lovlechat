@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("Database error:", err);
     
-    // DB 에러시 임시 ID 반환으로 성공 처리
+    // DB 연결 실패 시 폴백 데이터로 응답 (사용자 경험 보장)
     const tempId = Date.now();
     console.log(`캐릭터 생성 폴백 처리: ${name} (임시 ID: ${tempId})`);
     
@@ -121,7 +121,7 @@ export async function GET(req: NextRequest) {
     } catch (err) {
       console.error("Database error:", err);
       
-      // DB 에러시 폴백 데이터 반환
+      // DB 연결 실패 시 폴백 데이터로 응답 (사용자 경험 보장)
       return NextResponse.json({ ok: true, characters: fallbackCharacters, fallback: true }, {
         headers: {
           'Access-Control-Allow-Origin': '*',
@@ -151,7 +151,7 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error("Database error:", err);
     
-    // DB 에러시 폴백 데이터 반환
+    // DB 연결 실패 시 폴백 데이터로 응답 (사용자 경험 보장)
     return NextResponse.json({ ok: true, characters: fallbackCharacters, fallback: true }, {
       headers: {
         'Access-Control-Allow-Origin': '*',
