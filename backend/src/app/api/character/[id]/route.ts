@@ -162,10 +162,20 @@ export async function PUT(req: NextRequest, context: any) {
         id
       ]
     );
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true }, {
+      headers: {
+        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    });
   } catch (err) {
     console.error("Database error:", err);
-    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
+      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    } });
   }
 }
 
@@ -173,16 +183,30 @@ export async function DELETE(req: NextRequest, context: any) {
   const { id } = context.params;
   const userId = req.nextUrl.searchParams.get('userId');
   if (!userId) {
-    return NextResponse.json({ ok: false, error: 'userId required' }, { status: 400 });
+    return NextResponse.json({ ok: false, error: 'userId required' }, { status: 400, headers: {
+      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    } });
   }
   try {
     await pool.query(
       'INSERT IGNORE INTO character_hidden (userId, characterId) VALUES (?, ?)',
       [userId, id]
     );
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true }, {
+      headers: {
+        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    });
   } catch (err) {
     console.error('Database error:', err);
-    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
+      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    } });
   }
 } 
