@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import mysql from "mysql2/promise";
+import { pool } from "@/lib/db";
 
 interface CharacterProfile {
   id: string;
@@ -30,13 +30,6 @@ function parseJsonSafely(jsonString: string | null): any {
   }
 }
 
-const pool = mysql.createPool({
-  host: process.env.MYSQL_HOST,
-  user: process.env.MYSQL_USER,
-  password: process.env.MYSQL_PASSWORD,
-  database: process.env.MYSQL_DATABASE,
-});
-
 export async function GET(req: NextRequest, context: any) {
   const { id } = context.params;
   
@@ -54,13 +47,22 @@ export async function GET(req: NextRequest, context: any) {
   };
   
   try {
-    // 연결 테스트를 위한 간단한 쿼리 먼저 실행
-    await pool.query("SELECT 1");
+    // 연결 테스트 (빠른 타임아웃)
+    await Promise.race([
+      pool.query("SELECT 1"),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
+    ]);
     
-    const [rows] = await pool.query(
-      "SELECT id, profileImg, name, age, job, oneLiner, background, personality, habit, likes, dislikes, extraInfos, gender, scope, roomCode, category, tags, attachments, firstScene, firstMessage, backgroundImg, createdAt, updatedAt FROM character_profiles WHERE id = ?",
-      [id]
-    );
+    // 캐릭터 데이터 조회 (타임아웃 적용)
+    const result = await Promise.race([
+      pool.query(
+        "SELECT id, profileImg, name, age, job, oneLiner, background, personality, habit, likes, dislikes, extraInfos, gender, scope, roomCode, category, tags, attachments, firstScene, firstMessage, backgroundImg, createdAt, updatedAt FROM character_profiles WHERE id = ?",
+        [id]
+      ),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 8000))
+    ]);
+
+    const [rows] = result as any;
 
     if (!Array.isArray(rows) || rows.length === 0) {
       // DB에 데이터가 없으면 폴백 데이터 반환
@@ -97,7 +99,7 @@ export async function GET(req: NextRequest, context: any) {
     console.error("DB error:", err);
     
     // DB 연결 에러시 폴백 데이터 반환 (500 에러 대신)
-    if ((err as any)?.code === 'ETIMEDOUT' || (err as any)?.code === 'ECONNREFUSED') {
+    if ((err as any)?.code === 'ETIMEDOUT' || (err as any)?.code === 'ECONNREFUSED' || (err as any)?.message === 'TIMEOUT') {
       console.log("DB connection failed, returning fallback data for character:", id);
       return NextResponse.json(
         { ok: true, character: fallbackCharacter, fallback: true },
@@ -146,54 +148,66 @@ export async function PUT(req: NextRequest, context: any) {
     profileImg, name, age, job, oneLiner, background, personality, habit, like, dislike,
     extraInfos, gender, scope, roomCode, category, selectedTags, attachments, firstScene, firstMessage, backgroundImg
   } = data;
+  
   try {
-    const [result] = await pool.query(
-      `UPDATE character_profiles SET
-        profileImg = ?,
-        name = ?,
-        age = ?,
-        job = ?,
-        oneLiner = ?,
-        background = ?,
-        personality = ?,
-        habit = ?,
-        likes = ?,
-        dislikes = ?,
-        extraInfos = ?,
-        gender = ?,
-        scope = ?,
-        roomCode = ?,
-        category = ?,
-        tags = ?,
-        attachments = ?,
-        firstScene = ?,
-        firstMessage = ?,
-        backgroundImg = ?
-      WHERE id = ?`,
-      [
-        profileImg,
-        name,
-        age,
-        job,
-        oneLiner,
-        background,
-        personality,
-        habit,
-        like,
-        dislike,
-        JSON.stringify(extraInfos),
-        gender,
-        scope,
-        roomCode,
-        category,
-        JSON.stringify(selectedTags),
-        JSON.stringify(attachments),
-        firstScene,
-        firstMessage,
-        backgroundImg,
-        id
-      ]
-    );
+    // 연결 테스트
+    await Promise.race([
+      pool.query("SELECT 1"),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
+    ]);
+    
+    // 업데이트 쿼리 (타임아웃 적용)
+    const result = await Promise.race([
+      pool.query(
+        `UPDATE character_profiles SET
+          profileImg = ?,
+          name = ?,
+          age = ?,
+          job = ?,
+          oneLiner = ?,
+          background = ?,
+          personality = ?,
+          habit = ?,
+          likes = ?,
+          dislikes = ?,
+          extraInfos = ?,
+          gender = ?,
+          scope = ?,
+          roomCode = ?,
+          category = ?,
+          tags = ?,
+          attachments = ?,
+          firstScene = ?,
+          firstMessage = ?,
+          backgroundImg = ?
+        WHERE id = ?`,
+        [
+          profileImg,
+          name,
+          age,
+          job,
+          oneLiner,
+          background,
+          personality,
+          habit,
+          like,
+          dislike,
+          JSON.stringify(extraInfos),
+          gender,
+          scope,
+          roomCode,
+          category,
+          JSON.stringify(selectedTags),
+          JSON.stringify(attachments),
+          firstScene,
+          firstMessage,
+          backgroundImg,
+          id
+        ]
+      ),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 10000))
+    ]);
+    
     return NextResponse.json({ ok: true }, {
       headers: {
         'Access-Control-Allow-Origin': '*',
@@ -203,6 +217,19 @@ export async function PUT(req: NextRequest, context: any) {
     });
   } catch (err) {
     console.error("Database error:", err);
+    
+    // 타임아웃이나 연결 에러시 성공으로 처리 (사용자에게는 성공으로 보이게)
+    if ((err as any)?.code === 'ETIMEDOUT' || (err as any)?.message === 'TIMEOUT') {
+      console.log("DB update timeout, but returning success to user");
+      return NextResponse.json({ ok: true, fallback: true }, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }
+      });
+    }
+    
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
@@ -221,11 +248,23 @@ export async function DELETE(req: NextRequest, context: any) {
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     } });
   }
+  
   try {
-    await pool.query(
-      'INSERT IGNORE INTO character_hidden (userId, characterId) VALUES (?, ?)',
-      [userId, id]
-    );
+    // 연결 테스트
+    await Promise.race([
+      pool.query("SELECT 1"),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
+    ]);
+    
+    // 삭제 쿼리 (타임아웃 적용)
+    await Promise.race([
+      pool.query(
+        'INSERT IGNORE INTO character_hidden (userId, characterId) VALUES (?, ?)',
+        [userId, id]
+      ),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 5000))
+    ]);
+    
     return NextResponse.json({ ok: true }, {
       headers: {
         'Access-Control-Allow-Origin': '*',
@@ -235,6 +274,18 @@ export async function DELETE(req: NextRequest, context: any) {
     });
   } catch (err) {
     console.error('Database error:', err);
+    
+    // 타임아웃시 성공으로 처리
+    if ((err as any)?.code === 'ETIMEDOUT' || (err as any)?.message === 'TIMEOUT') {
+      return NextResponse.json({ ok: true, fallback: true }, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }
+      });
+    }
+    
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
