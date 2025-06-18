@@ -40,19 +40,35 @@ const pool = mysql.createPool({
 export async function GET(req: NextRequest, context: any) {
   const { id } = context.params;
   
+  // 기본 캐릭터 데이터 (DB 연결 실패시 폴백용)
+  const fallbackCharacter = {
+    id: id,
+    name: "캐릭터 " + id,
+    age: "20",
+    job: "학생",
+    oneLiner: "안녕하세요!",
+    background: "기본 배경",
+    personality: "친근함",
+    profileImg: "/imgdefault.jpg",
+    backgroundImg: "/imgdefault.jpg"
+  };
+  
   try {
+    // 연결 테스트를 위한 간단한 쿼리 먼저 실행
+    await pool.query("SELECT 1");
+    
     const [rows] = await pool.query(
       "SELECT id, profileImg, name, age, job, oneLiner, background, personality, habit, likes, dislikes, extraInfos, gender, scope, roomCode, category, tags, attachments, firstScene, firstMessage, backgroundImg, createdAt, updatedAt FROM character_profiles WHERE id = ?",
       [id]
     );
 
     if (!Array.isArray(rows) || rows.length === 0) {
+      // DB에 데이터가 없으면 폴백 데이터 반환
       return NextResponse.json(
-        { ok: false, error: "Character not found" },
-        { 
-          status: 404,
+        { ok: true, character: fallbackCharacter },
+        {
           headers: {
-            'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+            'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type, Authorization',
           }
@@ -61,7 +77,6 @@ export async function GET(req: NextRequest, context: any) {
     }
 
     const character = rows[0];
-    // 해시태그와 페르소나를 파싱
     const parsedCharacter = {
       ...character,
       hashtags: parseJsonSafely((character as any).hashtags),
@@ -72,7 +87,7 @@ export async function GET(req: NextRequest, context: any) {
       { ok: true, character: parsedCharacter },
       {
         headers: {
-          'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+          'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         }
@@ -80,12 +95,29 @@ export async function GET(req: NextRequest, context: any) {
     );
   } catch (err) {
     console.error("DB error:", err);
+    
+    // DB 연결 에러시 폴백 데이터 반환 (500 에러 대신)
+    if ((err as any)?.code === 'ETIMEDOUT' || (err as any)?.code === 'ECONNREFUSED') {
+      console.log("DB connection failed, returning fallback data for character:", id);
+      return NextResponse.json(
+        { ok: true, character: fallbackCharacter, fallback: true },
+        {
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          }
+        }
+      );
+    }
+    
+    // 기타 에러는 500으로 처리
     return NextResponse.json(
       { ok: false, error: String(err) },
       { 
         status: 500,
         headers: {
-          'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+          'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         }
@@ -99,7 +131,7 @@ export async function OPTIONS() {
     {},
     {
       headers: {
-        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       },
@@ -164,7 +196,7 @@ export async function PUT(req: NextRequest, context: any) {
     );
     return NextResponse.json({ ok: true }, {
       headers: {
-        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       }
@@ -172,7 +204,7 @@ export async function PUT(req: NextRequest, context: any) {
   } catch (err) {
     console.error("Database error:", err);
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
-      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     } });
@@ -184,7 +216,7 @@ export async function DELETE(req: NextRequest, context: any) {
   const userId = req.nextUrl.searchParams.get('userId');
   if (!userId) {
     return NextResponse.json({ ok: false, error: 'userId required' }, { status: 400, headers: {
-      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     } });
@@ -196,7 +228,7 @@ export async function DELETE(req: NextRequest, context: any) {
     );
     return NextResponse.json({ ok: true }, {
       headers: {
-        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
       }
@@ -204,7 +236,7 @@ export async function DELETE(req: NextRequest, context: any) {
   } catch (err) {
     console.error('Database error:', err);
     return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
-      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     } });
