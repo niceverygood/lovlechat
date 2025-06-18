@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pool } from "@/lib/db";
+import { executeQuery, executeMutation } from "@/lib/db-helper";
 
 interface CharacterProfile {
   id: string;
@@ -47,22 +47,12 @@ export async function GET(req: NextRequest, context: any) {
   };
   
   try {
-    // 연결 테스트 (빠른 타임아웃)
-    await Promise.race([
-      pool.query("SELECT 1"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
-    ]);
-    
-    // 캐릭터 데이터 조회 (타임아웃 적용)
-    const result = await Promise.race([
-      pool.query(
-        "SELECT id, profileImg, name, age, job, oneLiner, background, personality, habit, likes, dislikes, extraInfos, gender, scope, roomCode, category, tags, attachments, firstScene, firstMessage, backgroundImg, createdAt, updatedAt FROM character_profiles WHERE id = ?",
-        [id]
-      ),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 8000))
-    ]);
-
-    const [rows] = result as any;
+    // 최적화된 캐릭터 데이터 조회
+    const rows = await executeQuery(
+      "SELECT id, profileImg, name, age, job, oneLiner, background, personality, habit, likes, dislikes, extraInfos, gender, scope, roomCode, category, tags, attachments, firstScene, firstMessage, backgroundImg, createdAt, updatedAt FROM character_profiles WHERE id = ?",
+      [id],
+      5000
+    );
 
     if (!Array.isArray(rows) || rows.length === 0) {
       // DB에 데이터가 없으면 폴백 데이터 반환
@@ -150,63 +140,55 @@ export async function PUT(req: NextRequest, context: any) {
   } = data;
   
   try {
-    // 연결 테스트
-    await Promise.race([
-      pool.query("SELECT 1"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
-    ]);
-    
-    // 업데이트 쿼리 (타임아웃 적용)
-    const result = await Promise.race([
-      pool.query(
-        `UPDATE character_profiles SET
-          profileImg = ?,
-          name = ?,
-          age = ?,
-          job = ?,
-          oneLiner = ?,
-          background = ?,
-          personality = ?,
-          habit = ?,
-          likes = ?,
-          dislikes = ?,
-          extraInfos = ?,
-          gender = ?,
-          scope = ?,
-          roomCode = ?,
-          category = ?,
-          tags = ?,
-          attachments = ?,
-          firstScene = ?,
-          firstMessage = ?,
-          backgroundImg = ?
-        WHERE id = ?`,
-        [
-          profileImg,
-          name,
-          age,
-          job,
-          oneLiner,
-          background,
-          personality,
-          habit,
-          like,
-          dislike,
-          JSON.stringify(extraInfos),
-          gender,
-          scope,
-          roomCode,
-          category,
-          JSON.stringify(selectedTags),
-          JSON.stringify(attachments),
-          firstScene,
-          firstMessage,
-          backgroundImg,
-          id
-        ]
-      ),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 10000))
-    ]);
+    // 최적화된 업데이트 쿼리
+    const result = await executeMutation(
+      `UPDATE character_profiles SET
+        profileImg = ?,
+        name = ?,
+        age = ?,
+        job = ?,
+        oneLiner = ?,
+        background = ?,
+        personality = ?,
+        habit = ?,
+        likes = ?,
+        dislikes = ?,
+        extraInfos = ?,
+        gender = ?,
+        scope = ?,
+        roomCode = ?,
+        category = ?,
+        tags = ?,
+        attachments = ?,
+        firstScene = ?,
+        firstMessage = ?,
+        backgroundImg = ?
+      WHERE id = ?`,
+      [
+        profileImg,
+        name,
+        age,
+        job,
+        oneLiner,
+        background,
+        personality,
+        habit,
+        like,
+        dislike,
+        JSON.stringify(extraInfos || {}),
+        gender,
+        scope,
+        roomCode,
+        category,
+        JSON.stringify(selectedTags || []),
+        JSON.stringify(attachments || []),
+        firstScene,
+        firstMessage,
+        backgroundImg,
+        id
+      ],
+      8000
+    );
     
     return NextResponse.json({ ok: true }, {
       headers: {
@@ -250,20 +232,12 @@ export async function DELETE(req: NextRequest, context: any) {
   }
   
   try {
-    // 연결 테스트
-    await Promise.race([
-      pool.query("SELECT 1"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
-    ]);
-    
-    // 삭제 쿼리 (타임아웃 적용)
-    await Promise.race([
-      pool.query(
-        'INSERT IGNORE INTO character_hidden (userId, characterId) VALUES (?, ?)',
-        [userId, id]
-      ),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 5000))
-    ]);
+    // 최적화된 삭제 쿼리 (숨김 처리)
+    await executeMutation(
+      'INSERT IGNORE INTO character_hidden (userId, characterId) VALUES (?, ?)',
+      [userId, id],
+      4000
+    );
     
     return NextResponse.json({ ok: true }, {
       headers: {

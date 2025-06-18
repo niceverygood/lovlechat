@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pool } from "@/lib/db";
+import { executeQuery } from "@/lib/db-helper";
 
 // GET /api/chat/[id] - 특정 채팅방의 메시지 조회
 export async function GET(req: NextRequest, context: any) {
@@ -35,42 +35,24 @@ export async function GET(req: NextRequest, context: any) {
   ];
 
   try {
-    // 연결 테스트 (빠른 타임아웃)
-    await Promise.race([
-      pool.query("SELECT 1"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
-    ]);
-    
-    // 채팅 메시지 조회 (타임아웃 설정)
-    const chatResult = await Promise.race([
-      pool.query(
+    // 채팅 메시지와 호감도를 병렬로 조회
+    const [messages, favorRows] = await Promise.all([
+      executeQuery(
         "SELECT * FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT 50",
-        [personaId, id]
+        [personaId, id],
+        5000
       ),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 8000))
+      executeQuery(
+        "SELECT favor FROM character_favors WHERE personaId = ? AND characterId = ?",
+        [personaId, id],
+        2000
+      ).catch(() => []) // 호감도 조회 실패해도 메시지는 반환
     ]);
     
-    const [rows] = chatResult as any;
-    
-    // 호감도 조회 (빠른 타임아웃)
-    let favor = 0;
-    try {
-      const favorResult = await Promise.race([
-        pool.query(
-          "SELECT favor FROM character_favors WHERE personaId = ? AND characterId = ?",
-          [personaId, id]
-        ),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
-      ]);
-      const [favorRows] = favorResult as any;
-      favor = Array.isArray(favorRows) && favorRows.length > 0 ? favorRows[0]?.favor : 0;
-    } catch (favorErr) {
-      console.log("Favor query failed, using default:", favorErr);
-      favor = 0;
-    }
+    const favor = Array.isArray(favorRows) && favorRows.length > 0 ? favorRows[0]?.favor : 0;
     
     return NextResponse.json(
-      { ok: true, messages: rows, favor },
+      { ok: true, messages, favor },
       {
         headers: {
           'Access-Control-Allow-Origin': '*',

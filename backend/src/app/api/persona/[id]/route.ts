@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pool } from "@/lib/db";
+import { executeQuery, executeMutation } from "@/lib/db-helper";
 import { RowDataPacket } from "mysql2";
 
 interface UserPersona extends RowDataPacket {
@@ -28,22 +28,12 @@ export async function GET(req: NextRequest, context: any) {
   };
   
   try {
-    // 연결 테스트
-    await Promise.race([
-      pool.query("SELECT 1"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
-    ]);
-    
-    // 페르소나 조회 (타임아웃 적용)
-    const result = await Promise.race([
-      pool.query<UserPersona[]>(
-        "SELECT * FROM user_personas WHERE id = ?",
-        [id]
-      ),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 5000))
-    ]);
-    
-    const [rows] = result as any;
+    // 최적화된 페르소나 조회
+    const rows = await executeQuery(
+      "SELECT * FROM user_personas WHERE id = ?",
+      [id],
+      4000
+    );
 
     if (!Array.isArray(rows) || rows.length === 0) {
       return NextResponse.json(
@@ -90,17 +80,12 @@ export async function DELETE(req: NextRequest, context: any) {
   const { id } = context.params;
   
   try {
-    // 연결 테스트
-    await Promise.race([
-      pool.query("SELECT 1"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
-    ]);
-    
-    // 삭제 쿼리 (타임아웃 적용)
-    await Promise.race([
-      pool.query("DELETE FROM user_personas WHERE id = ?", [id]),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 5000))
-    ]);
+    // 최적화된 삭제 쿼리
+    await executeMutation(
+      "DELETE FROM user_personas WHERE id = ?",
+      [id],
+      4000
+    );
     
     return NextResponse.json({ ok: true }, {
       headers: {
@@ -144,20 +129,12 @@ export async function PUT(req: NextRequest, context: any) {
   age = age && !isNaN(Number(age)) ? Number(age) : null;
   
   try {
-    // 연결 테스트
-    await Promise.race([
-      pool.query("SELECT 1"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
-    ]);
-    
-    // 업데이트 쿼리 (타임아웃 적용)
-    await Promise.race([
-      pool.query(
-        `UPDATE user_personas SET name=?, avatar=?, gender=?, age=?, job=?, info=?, habit=? WHERE id=?`,
-        [name, avatar, gender, age, job, info, habit, id]
-      ),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 8000))
-    ]);
+    // 최적화된 업데이트 쿼리
+    await executeMutation(
+      `UPDATE user_personas SET name=?, avatar=?, gender=?, age=?, job=?, info=?, habit=? WHERE id=?`,
+      [name, avatar, gender, age, job, info, habit, id],
+      6000
+    );
     
     return NextResponse.json({ ok: true }, {
       headers: {

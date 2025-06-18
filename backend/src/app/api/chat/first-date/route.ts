@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pool } from "@/lib/db";
+import { executeQuery } from "@/lib/db-helper";
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
@@ -21,22 +21,12 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // 연결 테스트
-    await Promise.race([
-      pool.query("SELECT 1"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
-    ]);
-    
-    // 첫 데이트 조회 (타임아웃 적용)
-    const result = await Promise.race([
-      pool.query(
-        "SELECT MIN(createdAt) as firstDate FROM chats WHERE personaId = ? AND characterId = ?",
-        [personaId, characterId]
-      ),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 5000))
-    ]);
-    
-    const [rows] = result as any;
+    // 최적화된 첫 데이트 조회
+    const rows = await executeQuery(
+      "SELECT MIN(createdAt) as firstDate FROM chats WHERE personaId = ? AND characterId = ?",
+      [personaId, characterId],
+      3000
+    );
 
     if (!Array.isArray(rows) || rows.length === 0) {
       return NextResponse.json(

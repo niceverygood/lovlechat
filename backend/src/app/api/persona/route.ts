@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pool } from "@/lib/db";
+import { executeQuery, executeMutation } from "@/lib/db-helper";
 
 // GET /api/persona?userId=xxx
 export async function GET(req: NextRequest) {
@@ -28,44 +28,28 @@ export async function GET(req: NextRequest) {
   ];
 
   try {
-    // 연결 테스트 (빠른 타임아웃)
-    await Promise.race([
-      pool.query("SELECT 1"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
-    ]);
-
-    // 기본 프로필 존재 여부 확인 (타임아웃 적용)
-    const existResult = await Promise.race([
-      pool.query(
-        "SELECT * FROM user_personas WHERE userId = ? AND name = ?",
-        [userId, userId]
-      ),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 5000))
-    ]);
-    
-    const [existRows] = existResult as any;
+    // 기본 프로필 존재 여부 확인
+    const existRows = await executeQuery(
+      "SELECT * FROM user_personas WHERE userId = ? AND name = ?",
+      [userId, userId],
+      4000
+    );
     
     if (!Array.isArray(existRows) || existRows.length === 0) {
-      // 기본 프로필 자동 생성 (타임아웃 적용)
-      await Promise.race([
-        pool.query(
-          `INSERT INTO user_personas (userId, name, avatar, gender, age, job, info, habit) VALUES (?, ?, ?, '', '', '', '', '')`,
-          [userId, userId, '/avatars/user.jpg']
-        ),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 5000))
-      ]);
+      // 기본 프로필 자동 생성
+      await executeMutation(
+        `INSERT INTO user_personas (userId, name, avatar, gender, age, job, info, habit) VALUES (?, ?, ?, '', '', '', '', '')`,
+        [userId, userId, '/avatars/user.jpg'],
+        5000
+      );
     }
     
-    // 전체 목록 반환 (타임아웃 적용)
-    const listResult = await Promise.race([
-      pool.query(
-        "SELECT * FROM user_personas WHERE userId = ? ORDER BY createdAt DESC",
-        [userId]
-      ),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 5000))
-    ]);
-    
-    const [rows] = listResult as any;
+    // 전체 목록 반환
+    const rows = await executeQuery(
+      "SELECT * FROM user_personas WHERE userId = ? ORDER BY createdAt DESC",
+      [userId],
+      4000
+    );
     
     return NextResponse.json({ ok: true, personas: rows }, {
       headers: {
@@ -99,20 +83,12 @@ export async function POST(req: NextRequest) {
   }});
   
   try {
-    // 연결 테스트
-    await Promise.race([
-      pool.query("SELECT 1"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
-    ]);
-    
-    // INSERT 쿼리 (타임아웃 적용)
-    const result = await Promise.race([
-      pool.query(
-        `INSERT INTO user_personas (userId, name, avatar, gender, age, job, info, habit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [userId, name, avatar, gender, age, job, info, habit]
-      ),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 8000))
-    ]);
+    // 최적화된 INSERT 쿼리
+    const result = await executeMutation(
+      `INSERT INTO user_personas (userId, name, avatar, gender, age, job, info, habit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userId, name, avatar, gender, age, job, info, habit],
+      6000
+    );
     
     const [insertResult] = result as any;
     

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { pool } from "@/lib/db";
+import { executeQuery } from "@/lib/db-helper";
 
 // GET /api/character/favor?userId=xxx&characterId=xxx
 export async function GET(req: NextRequest) {
@@ -21,22 +21,13 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // 연결 테스트
-    await Promise.race([
-      pool.query("SELECT 1"),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
-    ]);
+    // 최적화된 호감도 조회
+    const rows = await executeQuery(
+      "SELECT favor FROM character_favors WHERE personaId = ? AND characterId = ?",
+      [userId, characterId],
+      3000
+    );
     
-    // 호감도 조회 (타임아웃 적용)
-    const result = await Promise.race([
-      pool.query(
-        "SELECT favor FROM character_favors WHERE personaId = ? AND characterId = ?",
-        [userId, characterId]
-      ),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 5000))
-    ]);
-    
-    const [rows] = result as any;
     const favor = Array.isArray(rows) && rows.length > 0 ? (rows[0] as any)?.favor : 0;
     
     return NextResponse.json(
