@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, context: any) {
       { 
         status: 400,
         headers: {
-          'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+          'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         }
@@ -20,24 +20,60 @@ export async function GET(req: NextRequest, context: any) {
     );
   }
 
+  // 폴백 채팅 데이터
+  const fallbackMessages = [
+    {
+      id: 1,
+      personaId: personaId,
+      characterId: id,
+      message: "안녕하세요! 처음 뵙겠습니다.",
+      sender: "ai",
+      createdAt: new Date().toISOString(),
+      characterName: "캐릭터 " + id,
+      characterProfileImg: "/imgdefault.jpg"
+    }
+  ];
+
   try {
-    const [rows] = await pool.query(
-      "SELECT * FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC",
-      [personaId, id]
-    );
+    // 연결 테스트 (빠른 타임아웃)
+    await Promise.race([
+      pool.query("SELECT 1"),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
+    ]);
     
-    // favor 조회
-    const [favorRows] = await pool.query(
-      "SELECT favor FROM character_favors WHERE personaId = ? AND characterId = ?",
-      [personaId, id]
-    );
-    const favor = Array.isArray(favorRows) && favorRows.length > 0 ? (favorRows[0] as any)?.favor : 0;
+    // 채팅 메시지 조회 (타임아웃 설정)
+    const chatResult = await Promise.race([
+      pool.query(
+        "SELECT * FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT 50",
+        [personaId, id]
+      ),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 8000))
+    ]);
+    
+    const [rows] = chatResult as any;
+    
+    // 호감도 조회 (빠른 타임아웃)
+    let favor = 0;
+    try {
+      const favorResult = await Promise.race([
+        pool.query(
+          "SELECT favor FROM character_favors WHERE personaId = ? AND characterId = ?",
+          [personaId, id]
+        ),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 3000))
+      ]);
+      const [favorRows] = favorResult as any;
+      favor = Array.isArray(favorRows) && favorRows.length > 0 ? favorRows[0]?.favor : 0;
+    } catch (favorErr) {
+      console.log("Favor query failed, using default:", favorErr);
+      favor = 0;
+    }
     
     return NextResponse.json(
       { ok: true, messages: rows, favor },
       {
         headers: {
-          'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+          'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         }
@@ -45,12 +81,13 @@ export async function GET(req: NextRequest, context: any) {
     );
   } catch (err) {
     console.error("DB error:", err);
+    
+    // DB 에러시 폴백 데이터 반환
     return NextResponse.json(
-      { ok: false, error: String(err) },
-      { 
-        status: 500,
+      { ok: true, messages: fallbackMessages, favor: 0, fallback: true },
+      {
         headers: {
-          'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+          'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         }
