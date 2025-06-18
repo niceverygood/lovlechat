@@ -82,7 +82,11 @@ export async function GET(req: NextRequest) {
       });
     } catch (err) {
       console.error("Database error:", err);
-      return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
+      return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
+        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      } });
     }
   }
   // 기존 전체 조회 (For You)
@@ -99,6 +103,23 @@ export async function GET(req: NextRequest) {
     });
   } catch (err) {
     console.error("Database error:", err);
-    return NextResponse.json({ ok: false, error: String(err) }, { status: 500 });
+    return NextResponse.json({ ok: false, error: String(err) }, { status: 500, headers: {
+      'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    } });
   }
+}
+
+export async function OPTIONS() {
+  return NextResponse.json(
+    {},
+    {
+      headers: {
+        'Access-Control-Allow-Origin': 'https://lovlechat.vercel.app',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      },
+    }
+  );
 } 
