@@ -624,13 +624,26 @@ export default function ForYouPage() {
         }),
       });
       if (response.ok) {
+        const resData = await response.json();
+        console.log('ForYou 페이지 - 생성된 프로필:', resData);
+        
+        // 모달들 먼저 닫기
         setShowProfileCreateModal(false);
         setShowPersonaManager(false);
-        // 목록 갱신
-        fetch(`${API_BASE_URL}/api/persona?userId=${userId}`)
-          .then(res => res.json())
-          .then(data => { if (data.ok) setPersonas(data.personas); });
-        alert('프로필이 성공적으로 생성되었습니다.');
+        
+        // 약간 지연 후 목록 갱신
+        setTimeout(async () => {
+          try {
+            const res = await fetch(`${API_BASE_URL}/api/persona?userId=${userId}`);
+            const data = await res.json();
+            if (data.ok) {
+                             setPersonas(data.personas || []);
+            }
+            alert('프로필이 성공적으로 생성되었습니다.');
+          } catch (error) {
+            console.error('페르소나 목록 갱신 에러:', error);
+          }
+        }, 100);
       } else {
         throw new Error('프로필 생성에 실패했습니다.');
       }

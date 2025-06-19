@@ -143,15 +143,23 @@ export default function MyPage() {
 
   // 멀티프로필 목록 최신화 함수
   const fetchPersonas = async () => {
-    const res = await fetch(`${API_BASE_URL}/api/persona?userId=${userId}`);
-    const data = await res.json();
-    if (data.ok && data.personas.length > 0) {
-      setPersonas(data.personas);
-      // 기본 프로필도 갱신
-      const defaultPersona = data.personas.find((p: Persona) => p.id === userId);
-      if (defaultPersona) {
-        setUserProfile({ name: defaultPersona.name, avatar: defaultPersona.avatar });
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/persona?userId=${userId}`);
+      const data = await res.json();
+      console.log('fetchPersonas 응답:', data); // 디버깅용
+      
+      if (data.ok) {
+        setPersonas(data.personas || []); // 빈 배열도 허용
+        // 기본 프로필도 갱신
+        const defaultPersona = data.personas?.find((p: Persona) => p.id === userId);
+        if (defaultPersona) {
+          setUserProfile({ name: defaultPersona.name, avatar: defaultPersona.avatar });
+        }
+      } else {
+        console.error('페르소나 조회 실패:', data.error);
       }
+    } catch (error) {
+      console.error('fetchPersonas 에러:', error);
     }
   };
 
@@ -212,9 +220,15 @@ export default function MyPage() {
       if (response.ok) {
         const resData = await response.json();
         console.log('생성된 프로필:', resData);
-        await fetchPersonas(); // 먼저 목록 갱신
-        setShowProfileCreateModal(false); // 그 다음 모달 닫기
-        alert('프로필이 성공적으로 생성되었습니다.');
+        
+        // 모달 먼저 닫기
+        setShowProfileCreateModal(false);
+        
+        // 약간 지연 후 목록 갱신 (UI 안정성)
+        setTimeout(async () => {
+          await fetchPersonas();
+          alert('프로필이 성공적으로 생성되었습니다.');
+        }, 100);
       } else {
         throw new Error('프로필 생성에 실패했습니다.');
       }
