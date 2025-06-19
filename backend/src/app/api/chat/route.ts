@@ -163,7 +163,10 @@ export async function POST(req: NextRequest) {
           "INSERT INTO chats (personaId, characterId, message, sender, characterName, characterProfileImg, characterAge, characterJob) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
           [normalizedData.personaId, normalizedData.characterId, aiText, "ai", character.name, character.profileImg, character.age, character.job],
           2000 // 타임아웃 단축 (3초 → 2초)
-        )
+        ).catch(err => {
+          console.log("Chat insert failed (non-critical):", err.message);
+          return null;
+        })
       ];
 
       if (favorDelta !== 0) {
@@ -179,7 +182,9 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      await Promise.all(savePromises);
+      // null이 아닌 결과만 필터링
+      const results = await Promise.all(savePromises);
+      const filteredResults = results.filter(r => r !== null);
 
       return NextResponse.json({ 
         ok: true, 
