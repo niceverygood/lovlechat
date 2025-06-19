@@ -7,9 +7,9 @@ const getApiBaseUrl = () => {
     return process.env.REACT_APP_API_BASE_URL;
   }
   
-  // 프로덕션 환경 - 백엔드 미배포시 Mock API 사용
+  // 프로덕션 환경 - 실제 배포된 백엔드 사용
   if (process.env.NODE_ENV === 'production') {
-    return ''; // 빈 문자열로 Mock API 활성화
+    return 'https://lovlechat-dq4i.vercel.app';
   }
   
   // 개발 환경
