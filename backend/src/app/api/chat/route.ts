@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { executeQuery, executeMutation } from "@/lib/db-helper";
+import { ResultSetHeader, FieldPacket } from "mysql2";
 
 const openai = new OpenAI({ 
   apiKey: process.env.OPENAI_API_KEY!,
@@ -158,7 +159,7 @@ export async function POST(req: NextRequest) {
       }
 
       // 6. AI 메시지 저장 & 호감도 업데이트 병렬 실행 (타임아웃 최적화)
-      const savePromises = [
+      const savePromises: Promise<[ResultSetHeader, FieldPacket[]] | null>[] = [
         executeMutation(
           "INSERT INTO chats (personaId, characterId, message, sender, characterName, characterProfileImg, characterAge, characterJob) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
           [normalizedData.personaId, normalizedData.characterId, aiText, "ai", character.name, character.profileImg, character.age, character.job],
