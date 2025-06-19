@@ -7,9 +7,9 @@ const getApiBaseUrl = () => {
     return process.env.REACT_APP_API_BASE_URL;
   }
   
-  // 프로덕션 환경
+  // 프로덕션 환경 - 백엔드 미배포시 Mock API 사용
   if (process.env.NODE_ENV === 'production') {
-    return 'https://lovlechat-backend.vercel.app';
+    return ''; // 빈 문자열로 Mock API 활성화
   }
   
   // 개발 환경
@@ -18,11 +18,63 @@ const getApiBaseUrl = () => {
 
 export const API_BASE_URL = getApiBaseUrl();
 
+// Mock API 데이터 (백엔드 미배포시 사용)
+const createMockResponse = (data: any) => {
+  return new Response(JSON.stringify(data), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' }
+  });
+};
+
+const getMockPersonas = (userId: string) => ([
+  {
+    id: "1",
+    userId: userId,
+    name: "기본 프로필",
+    avatar: "/imgdefault.jpg",
+    gender: "",
+    age: "",
+    job: "",
+    info: "",
+    habit: "",
+    createdAt: new Date().toISOString()
+  }
+]);
+
 // CORS 대응 fetch 래퍼
 export const corsRequest = async (
   endpoint: string, 
   options: RequestInit = {}
 ): Promise<Response> => {
+  // Mock API for production when backend is not deployed
+  if (API_BASE_URL === '' && process.env.NODE_ENV === 'production') {
+    console.log('🔄 Mock API 사용:', endpoint, options.method);
+    
+    // 페르소나 목록 조회
+    if (endpoint.includes('/api/persona') && (!options.method || options.method === 'GET')) {
+      const urlParams = new URLSearchParams(endpoint.split('?')[1]);
+      const userId = urlParams.get('userId') || 'mock_user';
+      return createMockResponse({ ok: true, personas: getMockPersonas(userId) });
+    }
+    
+    // 페르소나 생성
+    if (endpoint.includes('/api/persona') && options.method === 'POST') {
+      return createMockResponse({ 
+        ok: true, 
+        id: Date.now(), 
+        message: "프로필이 성공적으로 생성되었습니다!" 
+      });
+    }
+    
+    // 캐릭터 목록 조회
+    if (endpoint.includes('/api/character') && (!options.method || options.method === 'GET')) {
+      return createMockResponse({ ok: true, characters: [] });
+    }
+    
+    // 기본 성공 응답
+    return createMockResponse({ ok: true, message: "Mock API 응답" });
+  }
+  
   const url = `${API_BASE_URL}${endpoint}`;
   
   const defaultHeaders = {
