@@ -153,13 +153,13 @@ export async function GET(req: NextRequest) {
 
   if (userId) {
     try {
-      // 최적화된 쿼리 실행
+      // character_hidden 테이블이 없을 수 있으므로 단순화된 쿼리 사용
       const rows = await executeQuery(
         `SELECT id, profileImg, name, age, job, oneLiner, attachments, firstScene, firstMessage, backgroundImg 
          FROM character_profiles 
-         WHERE userId = ? AND id NOT IN (SELECT characterId FROM character_hidden WHERE userId = ?)
+         WHERE userId = ?
          ORDER BY createdAt DESC LIMIT 10`,
-        [userId, userId],
+        [userId],
         8000
       );
       
@@ -203,7 +203,7 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error("Database error:", err);
     
-    // DB 연결 실패 시 폴백 데이터로 응답 (사용자 경험 보장)
+    // DB 연결 실패 시 폴백 데이터로 응답
     return NextResponse.json({ ok: true, characters: fallbackCharacters, fallback: true }, {
       headers: {
         'Access-Control-Allow-Origin': '*',
