@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { executeQuery, executeMutation } from "@/lib/db-helper";
-import { corsSuccessResponse, corsErrorResponse, handleOptions } from "@/lib/cors-helper";
+
 
 export async function POST(req: NextRequest) {
   const data = await req.json();
@@ -214,6 +214,15 @@ export async function GET(req: NextRequest) {
   }
 }
 
-export async function OPTIONS(req: NextRequest) {
-  return handleOptions(req.headers.get('Origin'));
+export async function OPTIONS() {
+  return NextResponse.json(
+    {},
+    {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      },
+    }
+  );
 } 

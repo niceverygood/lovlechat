@@ -37,16 +37,16 @@ const nextConfig: NextConfig = {
     ];
   },
 
-  // 개발 환경 최적화
-  experimental: {
-    turbo: {
-      rules: {
-        // TypeScript 컴파일 최적화
-        '*.ts': ['typescript'],
-        '*.tsx': ['typescript']
-      }
-    }
-  },
+  // 개발 환경 최적화 (Turbopack 비활성화)
+  // experimental: {
+  //   turbo: {
+  //     rules: {
+  //       // TypeScript 컴파일 최적화
+  //       '*.ts': ['typescript'],
+  //       '*.tsx': ['typescript']
+  //     }
+  //   }
+  // },
 
   // 성능 최적화
   compress: true,
