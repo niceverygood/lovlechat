@@ -179,7 +179,7 @@ export async function POST(req: NextRequest) {
           ).catch(err => {
             console.log("Favor update failed (non-critical):", err.message);
             return null; // 호감도 실패는 치명적이지 않음
-          })
+          }) as any
         );
       }
 
