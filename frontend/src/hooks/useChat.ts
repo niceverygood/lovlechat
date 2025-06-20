@@ -36,9 +36,11 @@ export function useChat(
   const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState<ChatPagination | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [backgroundImageUrl] = useState<string>('');
   
   const abortControllerRef = useRef<AbortController | null>(null);
   const lastParamsRef = useRef<string>('');
+  const isLoadingRef = useRef<boolean>(false);
 
   // 현재 채팅 파라미터 문자열 생성
   const currentParams = `${characterId}_${personaId}`;
@@ -48,12 +50,16 @@ export function useChat(
     setError(null);
   }, []);
 
-  // 메시지 불러오기 (간소화됨)
+  // 메시지 불러오기 (대폭 최적화)
   const loadMessages = useCallback(async () => {
-    if (!characterId || !personaId || loading) return;
+    if (!characterId || !personaId) return;
     
-    // 이미 같은 파라미터로 로드했다면 스킵
-    if (lastParamsRef.current === currentParams && hasLoaded) return;
+    // 중복 호출 방지 (강화)
+    if (isLoadingRef.current || (lastParamsRef.current === currentParams && hasLoaded)) {
+      return;
+    }
+    
+    isLoadingRef.current = true;
     
     try {
       setLoading(true);
@@ -71,6 +77,8 @@ export function useChat(
       
       const endpoint = `/api/chat/${characterId}?personaId=${personaId}`;
       const data = await apiGet(endpoint, true); // 캐싱 활성화
+      
+      if (controller.signal.aborted) return;
       
       if (data.ok || data.messages) {
         const formattedMessages = (data.messages || []).map((msg: any) => ({
@@ -119,10 +127,11 @@ export function useChat(
       setMessages([]);
     } finally {
       setLoading(false);
+      isLoadingRef.current = false;
     }
-  }, [characterId, personaId, loading, clearError, currentParams, hasLoaded]);
+  }, [characterId, personaId, clearError, currentParams, hasLoaded]);
 
-  // 컴포넌트 마운트 시 또는 파라미터 변경 시 메시지 로드
+  // 컴포넌트 마운트 시 또는 파라미터 변경 시 메시지 로드 (최적화)
   useEffect(() => {
     if (!characterId || !personaId) return;
     
@@ -133,22 +142,28 @@ export function useChat(
       setPagination(null);
       setFavor(0);
       clearError();
+      isLoadingRef.current = false;
     }
     
-    loadMessages();
+    // 약간의 디바운싱 적용
+    const timeoutId = setTimeout(() => {
+      loadMessages();
+    }, 50);
     
     // 컴포넌트 언마운트 시 요청 취소
     return () => {
+      clearTimeout(timeoutId);
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
         abortControllerRef.current = null;
       }
+      isLoadingRef.current = false;
     };
   }, [characterId, personaId, loadMessages]);
 
   // 메시지 전송 (최적화됨)
   const sendMessage = useCallback(async (message: string) => {
-    if (!message.trim() || loading) return;
+    if (!message.trim() || loading || isLoadingRef.current) return;
     
     const messageText = message.trim();
     
@@ -249,6 +264,7 @@ export function useChat(
     setPagination(null);
     setFavor(0);
     clearError();
+    isLoadingRef.current = false;
     loadMessages();
   }, [clearError, loadMessages]);
 
@@ -266,6 +282,7 @@ export function useChat(
     refreshMessages,
     hasError: !!error,
     canLoadMore: pagination?.hasMore || false,
+    backgroundImageUrl,
     apiUrl: getApiUrl()
   };
 }

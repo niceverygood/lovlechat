@@ -3,7 +3,7 @@ import { executeQuery, executeMutation, executeQueryWithCache } from "@/lib/db-h
 import { successResponse, errorResponse, optionsResponse } from "@/lib/cors";
 
 /**
- * Persona API - 사용자가 생성한 멀티프로필 관리
+ * Persona API - 사용자가 생성한 멀티프로필 관리 (최적화됨)
  * 
  * 개념 정리:
  * - User: 구글 로그인한 실제 사용자 1명 (Firebase Auth uid)
@@ -15,10 +15,10 @@ import { successResponse, errorResponse, optionsResponse } from "@/lib/cors";
  * - 1명의 User가 여러 개의 Persona 생성 가능
  */
 
-// 환경별 설정
+// 환경별 설정 최적화
 const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
-const CACHE_DURATION = isVercel ? 240 : 120; // 4분/2분 캐싱
-const MAX_PERSONAS = isVercel ? 15 : 20; // Vercel에서는 더 적게
+const CACHE_DURATION = isVercel ? 300 : 180; // 5분/3분 캐싱 (연장)
+const MAX_PERSONAS = isVercel ? 15 : 20;
 
 function generatePersonaId() {
   return 'persona_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
@@ -32,20 +32,31 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // 완전한 SQL 쿼리 + 강력한 캐싱
     const personas = await executeQueryWithCache(
-      `SELECT id, userId, name, avatar, gender, age, job, createdAt FROM personas WHERE userId = ? ORDER BY createdAt DESC LIMIT ?`,
+      `SELECT id, userId, name, avatar, gender, age, job, createdAt 
+       FROM personas 
+       WHERE userId = ? 
+       ORDER BY createdAt DESC 
+       LIMIT ?`,
       [userId, MAX_PERSONAS],
       CACHE_DURATION
     );
 
-    return successResponse({ personas: personas || [] });
+    return successResponse({ 
+      personas: personas || [],
+      cached: true,
+      timestamp: new Date().toISOString()
+    });
+    
   } catch (error: any) {
     console.error('Persona 조회 에러:', error.message);
     
-    // 에러시 빈 배열 반환
+    // 에러시 빈 배열 반환 (장애 시 서비스 연속성)
     return successResponse({ 
       personas: [],
       fallback: true,
+      error: error.message,
       message: "페르소나 데이터를 불러올 수 없습니다." 
     });
   }
@@ -60,7 +71,7 @@ export async function POST(req: NextRequest) {
       return errorResponse('userId와 name은 필수입니다.', 400);
     }
 
-    // 입력 데이터 검증 및 정규화
+    // 입력 데이터 검증 및 정규화 (강화)
     const normalizedData = {
       name: String(name).trim().slice(0, 20),
       avatar: avatar || '/imgdefault.jpg',
@@ -72,22 +83,27 @@ export async function POST(req: NextRequest) {
     // 자동으로 ID 생성
     const personaId = generatePersonaId();
 
+    // 완전한 INSERT 쿼리
     const result = await executeMutation(
       `INSERT INTO personas (id, userId, name, avatar, gender, age, job, createdAt) 
        VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
       [personaId, userId, normalizedData.name, normalizedData.avatar, normalizedData.gender, normalizedData.age, normalizedData.job]
     );
 
-    return successResponse({ 
-      id: personaId,
-      message: '페르소나가 성공적으로 생성되었습니다!',
-      persona: {
+    if (result.success) {
+      return successResponse({ 
         id: personaId,
-        userId,
-        ...normalizedData,
-        createdAt: new Date().toISOString()
-      }
-    });
+        message: '페르소나가 성공적으로 생성되었습니다!',
+        persona: {
+          id: personaId,
+          userId,
+          ...normalizedData,
+          createdAt: new Date().toISOString()
+        }
+      });
+    } else {
+      throw new Error('페르소나 생성 실패');
+    }
     
   } catch (error: any) {
     console.error('Persona 생성 에러:', error.message);

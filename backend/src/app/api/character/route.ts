@@ -16,12 +16,12 @@ import { successResponse, errorResponse, optionsResponse } from "@/lib/cors";
  * - User의 여러 Persona로 동일한 Character와 채팅 가능
  */
 
-// 환경별 설정
+// 환경별 설정 최적화
 const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
-const CACHE_DURATION_USER = isVercel ? 240 : 180; // 4분/3분
-const CACHE_DURATION_PUBLIC = isVercel ? 600 : 300; // 10분/5분
-const MAX_USER_CHARACTERS = isVercel ? 8 : 10; // 사용자 캐릭터 제한
-const MAX_PUBLIC_CHARACTERS = isVercel ? 4 : 5; // 공개 캐릭터 제한
+const CACHE_DURATION = isVercel ? 600 : 300; // 10분/5분 장기 캐싱 (캐릭터는 자주 변경되지 않음)
+const PUBLIC_CACHE_DURATION = isVercel ? 900 : 600; // 공개 캐릭터는 더 오래 캐싱
+const MAX_USER_CHARACTERS = 10;
+const MAX_PUBLIC_CHARACTERS = 5;
 
 // 데이터 정규화 함수
 function normalizeCharacterData(data: any) {
@@ -67,123 +67,143 @@ const FALLBACK_CHARACTERS = [
   }
 ];
 
-export async function POST(req: NextRequest) {
-  try {
-    const data = await req.json();
-    
-    // 필수 필드 검증
-    if (!data.userId || !data.name?.trim()) {
-      return errorResponse("userId와 name은 필수입니다.", 400);
-    }
-    
-    const normalizedData = normalizeCharacterData(data);
-    
-    // 최적화된 INSERT 쿼리
-    const result = await executeMutation(
-      `INSERT INTO character_profiles
-        (userId, profileImg, name, age, job, oneLiner, background, personality, habit, 
-         likes, dislikes, extraInfos, gender, scope, roomCode, category, tags, attachments, 
-         firstScene, firstMessage, backgroundImg, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [
-        normalizedData.userId,
-        normalizedData.profileImg,
-        normalizedData.name,
-        normalizedData.age,
-        normalizedData.job,
-        normalizedData.oneLiner,
-        normalizedData.background,
-        normalizedData.personality,
-        normalizedData.habit,
-        normalizedData.like,
-        normalizedData.dislike,
-        JSON.stringify(normalizedData.extraInfos),
-        JSON.stringify(normalizedData.gender),
-        normalizedData.scope,
-        normalizedData.roomCode,
-        normalizedData.category,
-        JSON.stringify(normalizedData.selectedTags),
-        JSON.stringify(normalizedData.attachments),
-        normalizedData.firstScene,
-        normalizedData.firstMessage,
-        normalizedData.backgroundImg
-      ]
-    );
-    
-    const [insertResult] = result as any;
-    
-    return successResponse({ 
-      id: insertResult.insertId,
-      message: "캐릭터가 성공적으로 생성되었습니다!"
-    });
-    
-  } catch (err: any) {
-    console.error("Character creation error:", err.message);
-    
-    return errorResponse(
-      "캐릭터 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
-      500
-    );
-  }
-}
-
 export async function GET(req: NextRequest) {
   const userId = req.nextUrl.searchParams.get('userId');
   
   try {
     if (userId) {
-      // 사용자별 캐릭터 조회 (캐시 적용)
-      const rows = await executeQueryWithCache(
+      // 사용자 캐릭터 조회 (강력한 캐싱)
+      const userCharacters = await executeQueryWithCache(
         `SELECT id, profileImg, name, age, job, oneLiner, category, tags, attachments, 
                 likes, dislikes, firstScene, firstMessage, backgroundImg 
          FROM character_profiles 
          WHERE userId = ?
-         ORDER BY createdAt DESC LIMIT ?`,
+         ORDER BY createdAt DESC 
+         LIMIT ?`,
         [userId, MAX_USER_CHARACTERS],
-        CACHE_DURATION_USER
+        CACHE_DURATION
       );
+
+      return successResponse({ 
+        characters: userCharacters || [],
+        type: 'user_characters',
+        cached: true,
+        count: userCharacters?.length || 0
+      });
       
-      // 프론트엔드 호환성을 위해 selectedTags 및 like/dislike 필드 변환
-      const charactersWithSelectedTags = rows.map((char: any) => ({
-        ...char,
-        like: char.likes,       // DB likes → 프론트 like
-        dislike: char.dislikes, // DB dislikes → 프론트 dislike
-        selectedTags: parseJsonSafely(char.tags) || []
-      }));
-      
-      return successResponse({ characters: charactersWithSelectedTags });
+    } else {
+      // 공개 캐릭터 조회 (더 강력한 캐싱)
+      const publicCharacters = await executeQueryWithCache(
+        `SELECT id, profileImg, name, age, job, oneLiner, tags, attachments, 
+                likes, dislikes, firstScene, firstMessage, backgroundImg 
+         FROM character_profiles 
+         WHERE scope = '공개' 
+         ORDER BY RAND() 
+         LIMIT ?`,
+        [MAX_PUBLIC_CHARACTERS],
+        PUBLIC_CACHE_DURATION
+      );
+
+      return successResponse({ 
+        characters: publicCharacters || [],
+        type: 'public_characters',
+        cached: true,
+        count: publicCharacters?.length || 0
+      });
     }
     
-    // 전체 조회 (For You) - 캐시 적용
-    const rows = await executeQueryWithCache(
-      `SELECT id, profileImg, name, age, job, oneLiner, tags, attachments, 
-              likes, dislikes, firstScene, firstMessage, backgroundImg 
-       FROM character_profiles 
-       WHERE scope = '공개' 
-       ORDER BY RAND() LIMIT ?`,
-      [MAX_PUBLIC_CHARACTERS],
-      CACHE_DURATION_PUBLIC
-    );
+  } catch (error: any) {
+    console.error('Character 조회 에러:', error.message);
     
-    // 프론트엔드 호환성을 위해 selectedTags 및 like/dislike 필드 변환
-    const charactersWithSelectedTags = rows.map((char: any) => ({
-      ...char,
-      like: char.likes,       // DB likes → 프론트 like
-      dislike: char.dislikes, // DB dislikes → 프론트 dislike
-      selectedTags: parseJsonSafely(char.tags) || []
-    }));
-    
-    return successResponse({ characters: charactersWithSelectedTags });
-    
-  } catch (err: any) {
-    console.error("Character GET error:", err.message);
-    
-    // 폴백 데이터 반환
+    // 에러 시 빈 배열 반환 (서비스 연속성)
     return successResponse({ 
-      characters: FALLBACK_CHARACTERS,
+      characters: [],
       fallback: true,
+      error: error.message,
       message: "캐릭터 데이터를 불러올 수 없습니다."
     });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const data = await req.json();
+    const { 
+      userId, name, age, job, profileImg, oneLiner, background, 
+      personality, habit, likes, dislikes, extraInfos, gender, 
+      scope, roomCode, category, tags, attachments, firstScene, 
+      firstMessage, backgroundImg 
+    } = data;
+
+    if (!userId || !name?.trim()) {
+      return errorResponse('userId와 name은 필수입니다.', 400);
+    }
+
+    // 데이터 검증 및 정규화 (강화)
+    const normalizedData = {
+      name: String(name).trim().slice(0, 50),
+      age: age ? Math.min(Math.max(parseInt(age) || 20, 1), 200) : 20,
+      job: job ? String(job).trim().slice(0, 30) : '',
+      profileImg: profileImg || '/imgdefault.jpg',
+      oneLiner: oneLiner ? String(oneLiner).trim().slice(0, 100) : '',
+      background: background ? String(background).trim().slice(0, 500) : '',
+      personality: personality ? String(personality).trim().slice(0, 200) : '',
+      habit: habit ? String(habit).trim().slice(0, 100) : '',
+      likes: likes ? String(likes).trim().slice(0, 200) : '',
+      dislikes: dislikes ? String(dislikes).trim().slice(0, 200) : '',
+      extraInfos: JSON.stringify(extraInfos || []),
+      gender: gender || '설정하지 않음',
+      scope: scope || '비공개',
+      roomCode: roomCode || '',
+      category: category ? String(category).trim().slice(0, 50) : '기타',
+      tags: JSON.stringify(tags || []),
+      attachments: JSON.stringify(attachments || []),
+      firstScene: firstScene ? String(firstScene).trim().slice(0, 100) : '',
+      firstMessage: firstMessage ? String(firstMessage).trim().slice(0, 500) : '',
+      backgroundImg: backgroundImg || '/imgdefault.jpg'
+    };
+
+    // 완전한 INSERT 쿼리
+    const result = await executeMutation(
+      `INSERT INTO character_profiles (
+        userId, name, age, job, profileImg, oneLiner, background, personality, 
+        habit, likes, dislikes, extraInfos, gender, scope, roomCode, category, 
+        tags, attachments, firstScene, firstMessage, backgroundImg, 
+        createdAt, updatedAt
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [
+        userId, normalizedData.name, normalizedData.age, normalizedData.job,
+        normalizedData.profileImg, normalizedData.oneLiner, normalizedData.background,
+        normalizedData.personality, normalizedData.habit, normalizedData.likes,
+        normalizedData.dislikes, normalizedData.extraInfos, normalizedData.gender,
+        normalizedData.scope, normalizedData.roomCode, normalizedData.category,
+        normalizedData.tags, normalizedData.attachments, normalizedData.firstScene,
+        normalizedData.firstMessage, normalizedData.backgroundImg
+      ]
+    );
+
+    if (result.success && result.insertId) {
+      return successResponse({ 
+        id: result.insertId,
+        message: '캐릭터가 성공적으로 생성되었습니다!',
+        character: {
+          id: result.insertId,
+          userId,
+          ...normalizedData,
+          createdAt: new Date().toISOString()
+        }
+      });
+    } else {
+      throw new Error('캐릭터 생성 실패');
+    }
+    
+  } catch (error: any) {
+    console.error('Character 생성 에러:', error.message);
+    
+    return errorResponse(
+      "캐릭터 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+      500
+    );
   }
 }
 
