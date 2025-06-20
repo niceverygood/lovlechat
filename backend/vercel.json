@@ -11,8 +11,13 @@
   },
   "functions": {
     "src/app/api/**/*.ts": {
-      "maxDuration": 60,
+      "maxDuration": 30,
       "memory": 1024,
+      "runtime": "nodejs20.x"
+    },
+    "src/app/api/chat/**/*.ts": {
+      "maxDuration": 60,
+      "memory": 512,
       "runtime": "nodejs20.x"
     }
   },
@@ -22,7 +27,20 @@
       "headers": [
         { "key": "Access-Control-Allow-Origin", "value": "*" },
         { "key": "Access-Control-Allow-Methods", "value": "GET, POST, PUT, DELETE, OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" }
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type, Authorization" },
+        { "key": "Cache-Control", "value": "public, max-age=60" }
+      ]
+    },
+    {
+      "source": "/api/character/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=300" }
+      ]
+    },
+    {
+      "source": "/api/persona/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=180" }
       ]
     }
   ],
