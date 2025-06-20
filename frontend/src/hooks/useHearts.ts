@@ -15,134 +15,163 @@ interface UseHeartsReturn {
 
 const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3002';
 
-// 글로벌 캐시와 중복 요청 방지 (시간 연장)
+// 🔥 강력한 중복 호출 방지 시스템
 const heartCache = new Map<string, { data: HeartData; timestamp: number }>();
 const pendingRequests = new Map<string, Promise<HeartData>>();
-const CACHE_DURATION = 30000; // 30초 캐시 (기존 10초에서 증가)
-
-// 마지막 API 호출 시간 추적 (과도한 호출 방지)
 const lastCallTime = new Map<string, number>();
-const MIN_CALL_INTERVAL = 1000; // 1초 간격 제한
+
+// 캐싱 시간 대폭 증가: 60초
+const CACHE_DURATION = 60000; 
+// 최소 호출 간격: 3초
+const MIN_CALL_INTERVAL = 3000;
+
+// 컴포넌트 마운트 상태 추적
+const mountedComponents = new Set<string>();
 
 // 캐시에서 하트 데이터 조회
 function getCachedHearts(userId: string): HeartData | null {
   const cached = heartCache.get(userId);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-    console.log('💾 하트 캐시 히트:', cached.data);
+    console.log(`💎 하트 캐시 히트: ${userId} (${cached.data.hearts}개)`);
     return cached.data;
   }
   return null;
 }
 
 // 캐시에 하트 데이터 저장
-function setCachedHearts(userId: string, data: HeartData) {
-  heartCache.set(userId, { data, timestamp: Date.now() });
-  console.log('💾 하트 캐시 저장:', data);
+function setCachedHearts(userId: string, data: HeartData): void {
+  heartCache.set(userId, {
+    data,
+    timestamp: Date.now()
+  });
+  console.log(`💾 하트 캐시 저장: ${userId} (${data.hearts}개)`);
 }
 
-// 실제 API 호출 (중복 방지 + 호출 빈도 제한)
-async function fetchHearts(userId: string): Promise<HeartData> {
-  // 호출 빈도 제한 확인
-  const lastCall = lastCallTime.get(userId) || 0;
+// 🚫 중복 호출 완전 차단
+function canMakeApiCall(userId: string): boolean {
+  const lastCall = lastCallTime.get(userId);
   const now = Date.now();
-  if (now - lastCall < MIN_CALL_INTERVAL) {
-    console.log('⏱️ 하트 API 호출 빈도 제한 (1초 대기)');
-    await new Promise(resolve => setTimeout(resolve, MIN_CALL_INTERVAL - (now - lastCall)));
+  
+  if (lastCall && now - lastCall < MIN_CALL_INTERVAL) {
+    console.log(`⏳ API 호출 차단: ${userId} (${Math.ceil((MIN_CALL_INTERVAL - (now - lastCall)) / 1000)}초 대기)`);
+    return false;
+  }
+  
+  return true;
+}
+
+// 하트 데이터 가져오기 (강력한 중복 방지)
+async function fetchHearts(userId: string): Promise<HeartData> {
+  // 1. 캐시 확인
+  const cached = getCachedHearts(userId);
+  if (cached) {
+    return cached;
   }
 
-  // 이미 진행 중인 요청이 있으면 기다림
-  if (pendingRequests.has(userId)) {
-    console.log('⏳ 진행 중인 하트 API 요청 대기...');
-    return pendingRequests.get(userId)!;
+  // 2. 호출 빈도 제한 확인
+  if (!canMakeApiCall(userId)) {
+    const fallback = heartCache.get(userId)?.data || { hearts: 0, lastUpdate: new Date().toISOString() };
+    return fallback;
   }
 
-  // 새로운 요청 생성
-  const request = (async (): Promise<HeartData> => {
+  // 3. 이미 진행 중인 요청 확인
+  const pendingRequest = pendingRequests.get(userId);
+  if (pendingRequest) {
+    console.log(`🔄 진행중인 요청 대기: ${userId}`);
+    return pendingRequest;
+  }
+
+  // 4. 새로운 API 요청
+  const requestPromise = (async (): Promise<HeartData> => {
     try {
       lastCallTime.set(userId, Date.now());
-      console.log('🔄 하트 API 호출:', userId);
-      
-      const response = await fetch(`${API_BASE_URL}/api/hearts?userId=${encodeURIComponent(userId)}`);
-      const data = await response.json();
+      console.log(`🌐 하트 API 호출: ${userId}`);
 
-      if (data.ok) {
-        const heartData: HeartData = {
-          hearts: data.hearts,
-          lastUpdate: data.lastUpdate
-        };
-        setCachedHearts(userId, heartData);
-        return heartData;
-      } else {
-        throw new Error(data.error || '하트 정보를 가져올 수 없습니다.');
+      const response = await fetch(`${API_BASE_URL}/api/hearts?userId=${userId}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
+
+      const data = await response.json();
+      if (!data.ok) {
+        throw new Error(data.error || '하트 조회 실패');
+      }
+
+      const heartData: HeartData = {
+        hearts: data.hearts,
+        lastUpdate: data.lastUpdate || new Date().toISOString()
+      };
+
+      // 캐시 저장
+      setCachedHearts(userId, heartData);
+      return heartData;
+
+    } catch (error) {
+      console.error('❌ 하트 API 에러:', error);
+      // 에러 시 캐시된 데이터 반환
+      const fallback = heartCache.get(userId)?.data || { hearts: 0, lastUpdate: new Date().toISOString() };
+      return fallback;
     } finally {
-      // 요청 완료 후 pendingRequests에서 제거
+      // 요청 완료 후 정리
       pendingRequests.delete(userId);
     }
   })();
 
   // 진행 중인 요청으로 등록
-  pendingRequests.set(userId, request);
-  return request;
+  pendingRequests.set(userId, requestPromise);
+  return requestPromise;
 }
 
+// useHearts 훅
 export function useHearts(userId: string | null): UseHeartsReturn {
   const [hearts, setHearts] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const lastUserIdRef = useRef<string | null>(null);
-  const mountedRef = useRef<boolean>(true);
+  const componentId = useRef<string>(`hearts-${Date.now()}-${Math.random()}`);
+  const isMountedRef = useRef<boolean>(true);
 
-  // 하트 정보 조회 (캐싱 적용)
+  // 컴포넌트 마운트 등록
+  useEffect(() => {
+    mountedComponents.add(componentId.current);
+    return () => {
+      isMountedRef.current = false;
+      mountedComponents.delete(componentId.current);
+    };
+  }, []);
+
+  // 하트 새로고침
   const refreshHearts = useCallback(async () => {
-    if (!userId || !mountedRef.current) {
-      setLoading(false);
-      return;
-    }
+    if (!userId || !isMountedRef.current) return;
 
     try {
-      setError(null);
-      
-      // 캐시에서 먼저 확인
-      const cached = getCachedHearts(userId);
-      if (cached) {
-        setHearts(cached.hearts);
-        setLoading(false);
-        return;
-      }
-
       setLoading(true);
-      // 캐시에 없으면 API 호출
-      const heartData = await fetchHearts(userId);
+      setError(null);
+
+      const data = await fetchHearts(userId);
       
-      if (mountedRef.current) {
-        setHearts(heartData.hearts);
+      if (isMountedRef.current) {
+        setHearts(data.hearts);
       }
     } catch (err) {
-      console.error('하트 조회 실패:', err);
-      if (mountedRef.current) {
-        // 하트 시스템이 준비되지 않은 경우 기본값으로 설정
-        setHearts(100); // 임시로 100개 표시
-        setError(null); // 에러 표시하지 않음
-        console.warn('하트 시스템 준비 중 - 임시로 100개 표시');
+      if (isMountedRef.current) {
+        setError(err instanceof Error ? err.message : '알 수 없는 오류');
       }
     } finally {
-      if (mountedRef.current) {
+      if (isMountedRef.current) {
         setLoading(false);
       }
     }
   }, [userId]);
 
-  // 하트 사용 (캐시 업데이트 포함)
-  const useHearts = useCallback(async (
-    amount: number, 
-    description: string = '', 
-    relatedId: string = ''
-  ): Promise<boolean> => {
-    if (!userId) {
-      setError('로그인이 필요합니다.');
-      return false;
-    }
+  // 하트 사용
+  const useHearts = useCallback(async (amount: number, description?: string, relatedId?: string): Promise<boolean> => {
+    if (!userId || !isMountedRef.current) return false;
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/hearts`, {
@@ -152,64 +181,37 @@ export function useHearts(userId: string | null): UseHeartsReturn {
         },
         body: JSON.stringify({
           userId,
-          amount,
-          type: 'chat',
-          description,
+          amount: -amount,
+          description: description || '하트 사용',
           relatedId
-        })
+        }),
       });
 
       const data = await response.json();
-
       if (data.ok) {
-        // 하트 사용 성공시 로컬 상태 및 캐시 업데이트
-        const newHearts = data.afterHearts;
-        if (mountedRef.current) {
-          setHearts(newHearts);
-          setCachedHearts(userId, { hearts: newHearts, lastUpdate: new Date().toISOString() });
-          setError(null);
+        // 캐시 업데이트
+        setCachedHearts(userId, {
+          hearts: data.hearts,
+          lastUpdate: new Date().toISOString()
+        });
+        
+        if (isMountedRef.current) {
+          setHearts(data.hearts);
         }
         return true;
       } else {
-        // 하트 부족 등의 에러
-        if (mountedRef.current) {
-          setError(data.error || '하트 사용에 실패했습니다.');
-          
-          // 하트 부족시 최신 하트 정보로 업데이트
-          if (data.currentHearts !== undefined) {
-            setHearts(data.currentHearts);
-            setCachedHearts(userId, { hearts: data.currentHearts, lastUpdate: new Date().toISOString() });
-          }
-        }
-        return false;
+        throw new Error(data.error || '하트 사용 실패');
       }
     } catch (err) {
       console.error('하트 사용 실패:', err);
-      if (mountedRef.current) {
-        setError('네트워크 오류가 발생했습니다.');
-      }
       return false;
     }
   }, [userId]);
 
-  // 컴포넌트 마운트 상태 추적
+  // 초기 로드 (한 번만)
   useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
-
-  // userId 변경시에만 하트 정보 새로고침 (불필요한 재호출 방지)
-  useEffect(() => {
-    if (userId && userId !== lastUserIdRef.current) {
-      lastUserIdRef.current = userId;
+    if (userId && isMountedRef.current) {
       refreshHearts();
-    } else if (!userId) {
-      setHearts(0);
-      setLoading(false);
-      setError(null);
-      lastUserIdRef.current = null;
     }
   }, [userId, refreshHearts]);
 
@@ -218,17 +220,17 @@ export function useHearts(userId: string | null): UseHeartsReturn {
     loading,
     error,
     refreshHearts,
-    useHearts,
+    useHearts
   };
 }
 
-// 캐시 정리 함수 (메모리 누수 방지)
+// 캐시 정리 (5분마다)
 setInterval(() => {
   const now = Date.now();
   let deletedCount = 0;
   
   heartCache.forEach((value, key) => {
-    if (now - value.timestamp > CACHE_DURATION) {
+    if (now - value.timestamp > CACHE_DURATION * 5) { // 5배 시간 후 정리
       heartCache.delete(key);
       deletedCount++;
     }
@@ -237,4 +239,4 @@ setInterval(() => {
   if (deletedCount > 0) {
     console.log(`🧹 하트 캐시 정리: ${deletedCount}개 항목 삭제`);
   }
-}, 60000); // 1분마다 정리 
+}, 300000); // 5분마다 
