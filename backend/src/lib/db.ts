@@ -24,7 +24,7 @@ const isVercel = !!(process.env.VERCEL || process.env.VERCEL_ENV);
 const isLocal = !isVercel && process.env.NODE_ENV === 'development';
 const isProduction = process.env.NODE_ENV === 'production';
 
-// === 극한 최적화 DB 설정 ===
+// === 🚀 극도로 최적화된 DB 설정 ===
 const DB_CONFIG: mysql.PoolOptions = {
   host: process.env.DB_HOST || 'lovlechat-db.cf48aygyuqv7.ap-southeast-2.rds.amazonaws.com',
   port: parseInt(process.env.DB_PORT || '3306'),
@@ -35,62 +35,54 @@ const DB_CONFIG: mysql.PoolOptions = {
   
   // 단일 연결로 최적화
   connectionLimit: 1,
-  waitForConnections: false, // 대기 시간 제거
+  waitForConnections: false,
   queueLimit: 0,
   
   // SSL 설정
   ssl: isLocal ? undefined : { rejectUnauthorized: false }
 };
 
-// === 진정한 싱글톤 DB 풀 ===
-export function getPool(): mysql.Pool {
-  // 이미 생성된 경우 즉시 반환
-  if (global.__LOVLE_DB_POOL__ && global.__LOVLE_DB_READY__) {
+// === 🚀 전역 싱글톤 DB 풀 ===
+function initializePool(): mysql.Pool {
+  if (global.__LOVLE_DB_POOL__) {
     return global.__LOVLE_DB_POOL__;
   }
-
-  // 처음 생성시에만
-  if (!global.__LOVLE_DB_POOL__) {
-    global.__LOVLE_DB_POOL__ = mysql.createPool(DB_CONFIG);
+  
+  const pool = mysql.createPool(DB_CONFIG);
+  global.__LOVLE_DB_POOL__ = pool;
+  
+  // 한 번만 로그 출력
+  if (!global.__LOVLE_DB_READY__) {
+    console.log(`🔗 DB 연결 풀 초기화 완료 (${isLocal ? '로컬' : 'Vercel'} 모드)`);
     global.__LOVLE_DB_READY__ = true;
-    
-    // 개발 환경에서만 한 번만 로그
-    if (isLocal && !global.__LOVLE_CLEANUP_DONE__) {
-      console.log('🚀 DB 초기화 완료 (고성능 모드)');
-    }
   }
-
-  // 정리 핸들러는 딱 한 번만 등록
+  
+  // 프로세스 종료 시 정리 (한 번만 등록)
   if (!global.__LOVLE_CLEANUP_DONE__) {
-    // 모든 정리 로직을 하나로 통합
     const cleanup = async () => {
-      if (global.__LOVLE_DB_POOL__) {
-        try {
+      try {
+        if (global.__LOVLE_DB_POOL__) {
           await global.__LOVLE_DB_POOL__.end();
           global.__LOVLE_DB_POOL__ = undefined;
-          global.__LOVLE_DB_READY__ = false;
-        } catch (error) {
-          // 에러 무시 (이미 정리됨)
         }
+      } catch (error) {
+        // 정리 실패 무시
       }
     };
-
-    // 단일 핸들러로 모든 종료 신호 처리
-    const signals = ['SIGTERM', 'SIGINT', 'SIGQUIT', 'beforeExit'];
-    signals.forEach(signal => {
-      process.once(signal as any, cleanup);
-    });
-
-    // uncaughtException 처리
-    process.once('uncaughtException', async (error) => {
-      await cleanup();
-      process.exit(1);
-    });
-
+    
+    process.once('SIGTERM', cleanup);
+    process.once('SIGINT', cleanup);
+    process.once('exit', cleanup);
+    
     global.__LOVLE_CLEANUP_DONE__ = true;
   }
+  
+  return pool;
+}
 
-  return global.__LOVLE_DB_POOL__;
+// === 🚀 메인 풀 접근 함수 ===
+export function getPool(): mysql.Pool {
+  return initializePool();
 }
 
 // === 캐시된 연결 확인 ===
