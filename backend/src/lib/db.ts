@@ -29,8 +29,22 @@ export const pool = mysql.createPool({
   // 연결 타임아웃 최적화
   connectTimeout: isVercel ? 30000 : (isProduction ? 20000 : 5000), // 로컬: 5초, 운영: 20초, Vercel: 30초
   
-  // SSL 설정 (RDS에서는 필요시 활성화)
-  ssl: (isProduction || isVercel) ? { rejectUnauthorized: false } : undefined,
+  // 연결 유지 설정 (연결 풀 정리 빈도 감소)
+  idleTimeout: isVercel ? 300000 : (isProduction ? 300000 : 600000), // 5-10분 유지
+  
+  // SSL 설정 (RDS에서는 필요시 활성화) - MySQL2 호환성 향상
+  ssl: (isProduction || isVercel) ? { 
+    rejectUnauthorized: false,
+    minVersion: 'TLSv1.2'
+  } : undefined,
+  
+  // MySQL2 호환성 설정
+  typeCast: function (field: any, next: any) {
+    if (field.type === 'TINY' && field.length === 1) {
+      return (field.string() === '1'); // TINYINT(1) -> Boolean
+    }
+    return next();
+  }
 });
 
 // 연결 풀 상태 모니터링 (개발 환경에서만)
@@ -38,28 +52,46 @@ if (!isProduction && !isVercel) {
   console.log('🔗 DB 연결 풀 초기화 완료 (로컬 모드)');
 }
 
-// 정리 함수 최적화 (덜 빈번하게 호출)
+// 연결 풀 정리 타이머 (덜 빈번하게 호출)
 let cleanupTimer: NodeJS.Timeout | null = null;
+let lastCleanupTime = 0;
+const CLEANUP_INTERVAL = isProduction || isVercel ? 300000 : 600000; // 5-10분 간격
 
 export const gracefulShutdown = () => {
+  const now = Date.now();
+  
+  // 너무 자주 호출되는 것을 방지
+  if (now - lastCleanupTime < CLEANUP_INTERVAL) {
+    console.log('⏱️ DB 연결 풀 정리 스킵 (최근에 실행됨)');
+    return;
+  }
+  
   if (cleanupTimer) {
     clearTimeout(cleanupTimer);
   }
   
   cleanupTimer = setTimeout(async () => {
     try {
+      lastCleanupTime = Date.now();
       await pool.end();
       console.log('🔌 DB 연결 풀 정리 완료');
     } catch (error) {
       console.error('DB 연결 풀 정리 중 오류:', error);
     }
-  }, isProduction || isVercel ? 5000 : 30000); // 로컬: 30초, 운영/Vercel: 5초
+  }, 2000); // 2초 지연 (기존 5초, 30초에서 단축)
 };
 
-// 프로세스 종료시 정리
-process.on('SIGINT', gracefulShutdown);
-process.on('SIGTERM', gracefulShutdown);
-process.on('uncaughtException', gracefulShutdown);
+// 프로세스 종료시 정리 (한 번만 등록)
+let shutdownHandlersRegistered = false;
+if (!shutdownHandlersRegistered) {
+  process.on('SIGINT', gracefulShutdown);
+  process.on('SIGTERM', gracefulShutdown);
+  process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+    gracefulShutdown();
+  });
+  shutdownHandlersRegistered = true;
+}
 
 // 연결 풀 상태 확인 함수
 export const getPoolStatus = () => {
@@ -103,4 +135,15 @@ export const checkConnection = async () => {
 // Vercel 환경에서 연결 모니터링
 if (isVercel) {
   console.log('🌐 Vercel 환경에서 실행 중 - DB 연결 최적화 적용');
+}
+
+// 정기적인 연결 상태 확인 (장시간 실행시 연결 유지)
+if (!isVercel) {
+  setInterval(async () => {
+    try {
+      await checkConnection();
+    } catch (error) {
+      console.warn('⚠️ 정기 연결 체크 실패:', error);
+    }
+  }, 600000); // 10분마다 체크
 }

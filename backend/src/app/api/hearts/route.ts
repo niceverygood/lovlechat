@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '../../../lib/db-helper';
 import { CORS_HEADERS } from '../../../lib/cors';
+import { pool } from '../../../lib/db';
 
 // 🎯 사용자 하트 조회 API
 export async function GET(request: NextRequest) {
@@ -71,6 +72,8 @@ export async function GET(request: NextRequest) {
 
 // 💖 하트 사용 API
 export async function POST(request: NextRequest) {
+  let connection: any = null;
+  
   try {
     const body = await request.json();
     const { userId, amount = 10, type = 'chat', description = '', relatedId = '' } = body;
@@ -147,25 +150,27 @@ export async function POST(request: NextRequest) {
 
     const newHearts = currentHearts - amount;
 
-    // 트랜잭션으로 하트 차감 및 내역 저장
-    await executeQuery('START TRANSACTION', [], 5000);
+    // DB 연결 및 트랜잭션으로 하트 차감 및 내역 저장
+    connection = await pool.getConnection();
+    
+    // 트랜잭션 명령어는 query() 메서드 사용 (prepared statement 호환성 문제 해결)
+    await connection.query('START TRANSACTION');
 
     try {
-      // 하트 차감
-      await executeQuery(
+      // 하트 차감 (execute() 메서드 사용)
+      await connection.execute(
         'UPDATE users SET hearts = ?, lastHeartUpdate = NOW() WHERE userId = ?',
-        [newHearts, userId],
-        5000
+        [newHearts, userId]
       );
 
-      // 사용 내역 저장
-      await executeQuery(
+      // 사용 내역 저장 (execute() 메서드 사용)
+      await connection.execute(
         'INSERT INTO heart_transactions (userId, amount, type, description, beforeHearts, afterHearts, relatedId) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [userId, -amount, type, description, currentHearts, newHearts, relatedId],
-        5000
+        [userId, -amount, type, description, currentHearts, newHearts, relatedId]
       );
 
-      await executeQuery('COMMIT', [], 5000);
+      // 트랜잭션 커밋 (query() 메서드 사용)
+      await connection.query('COMMIT');
 
       return NextResponse.json({
         ok: true,
@@ -179,7 +184,8 @@ export async function POST(request: NextRequest) {
       });
 
     } catch (error) {
-      await executeQuery('ROLLBACK', [], 5000);
+      // 트랜잭션 롤백 (query() 메서드 사용)
+      await connection.query('ROLLBACK');
       throw error;
     }
 
@@ -193,6 +199,11 @@ export async function POST(request: NextRequest) {
       status: 500,
       headers: CORS_HEADERS
     });
+  } finally {
+    // 연결 해제
+    if (connection) {
+      connection.release();
+    }
   }
 }
 
