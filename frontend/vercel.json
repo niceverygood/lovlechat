@@ -35,11 +35,6 @@
       "NODE_ENV": "production",
       "GENERATE_SOURCEMAP": "false",
       "REACT_APP_API_BASE_URL": "https://lovlechat-backend.vercel.app"
-    },
-    "functions": {
-      "build": {
-        "memory": 1024
-      }
     }
   }
   
