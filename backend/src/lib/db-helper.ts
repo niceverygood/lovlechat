@@ -1,46 +1,28 @@
 import { getPool } from './db';
 import { FieldPacket, QueryResult, ResultSetHeader, RowDataPacket } from 'mysql2';
 
-// 환경별 설정
-const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
+// === 환경 설정 ===
+const isVercel = process.env.VERCEL === '1' || !!process.env.VERCEL_ENV;
 const isProduction = process.env.NODE_ENV === 'production';
+const isDevelopment = process.env.NODE_ENV === 'development';
 
-// 최적화된 타임아웃 설정
-const QUERY_TIMEOUT = isVercel ? 12000 : 8000;
-const MAX_RETRIES = isVercel ? 1 : 2;
+// === 최적화된 설정 ===
+const QUERY_TIMEOUT = isVercel ? 10000 : 8000; // 타임아웃 단축
+const MAX_RETRIES = 1; // 재시도 최소화
+const CACHE_TTL = isVercel ? 60000 : 120000; // 캐시 TTL (1-2분)
+const MAX_CACHE_SIZE = isVercel ? 15 : 25; // 캐시 크기 제한
 
-// 강화된 캐싱 시스템
-const queryCache = new Map<string, { data: any; timestamp: number; ttl: number }>();
-const CACHE_CLEANUP_INTERVAL = 5 * 60 * 1000; // 5분마다 정리
-const MAX_CACHE_SIZE = isVercel ? 20 : 40;
-
-// 진행 중인 쿼리 추적 (중복 방지)
-const pendingQueries = new Map<string, Promise<any>>();
-
-// 최적화된 재시도 로직
-async function withRetry<T>(operation: () => Promise<T>, retries = MAX_RETRIES): Promise<T> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      return await operation();
-    } catch (error: any) {
-      if (attempt === retries) throw error;
-      
-      // 재시도 가능한 에러인지 확인
-      const shouldRetry = error.code === 'ECONNRESET' || 
-                         error.code === 'ETIMEDOUT' || 
-                         error.message?.includes('connection');
-      
-      if (!shouldRetry) throw error;
-      
-      // 지수 백오프
-      const delay = Math.min(1000 * Math.pow(2, attempt), 3000);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-  throw new Error('재시도 실패');
+// === 최적화된 캐시 시스템 ===
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+  ttl: number;
 }
 
-// 캐시 정리 (백그라운드)
+const queryCache = new Map<string, CacheEntry>();
+const activeQueries = new Map<string, Promise<any>>(); // 중복 쿼리 방지
+
+// === 캐시 정리 (주기적) ===
 let cacheCleanupTimer: NodeJS.Timeout | null = null;
 
 function startCacheCleanup() {
@@ -51,8 +33,8 @@ function startCacheCleanup() {
     let cleaned = 0;
     
     // 만료된 항목 제거
-    for (const [key, value] of queryCache.entries()) {
-      if (now - value.timestamp > value.ttl) {
+    for (const [key, entry] of queryCache.entries()) {
+      if (now - entry.timestamp > entry.ttl) {
         queryCache.delete(key);
         cleaned++;
       }
@@ -60,192 +42,219 @@ function startCacheCleanup() {
     
     // LRU 기반 크기 제한
     if (queryCache.size > MAX_CACHE_SIZE) {
-      const sortedEntries = Array.from(queryCache.entries())
+      const entries = Array.from(queryCache.entries())
         .sort((a, b) => a[1].timestamp - b[1].timestamp);
       
       const toRemove = queryCache.size - MAX_CACHE_SIZE;
       for (let i = 0; i < toRemove; i++) {
-        queryCache.delete(sortedEntries[i][0]);
+        queryCache.delete(entries[i][0]);
         cleaned++;
       }
     }
     
-    if (!isProduction && cleaned > 0) {
-      console.log(`🧹 캐시 정리: ${cleaned}개 항목 제거`);
+    if (cleaned > 0 && isDevelopment) {
+      console.log(`🧹 캐시 정리 완료: ${cleaned}개 항목 제거`);
     }
-  }, CACHE_CLEANUP_INTERVAL);
+  }, 5 * 60 * 1000); // 5분마다
 }
 
-// 캐시 정리 시작
+// 즉시 정리 시작
 startCacheCleanup();
 
-// 안전한 쿼리 로깅 (문자열 잘림 방지)
-function logQuery(query: string, params?: any[]) {
-  if (isProduction) return; // 프로덕션에서는 로깅 최소화
-  
-  try {
-    // 쿼리를 완전한 형태로 로깅 (잘림 방지)
-    const fullQuery = query.length > 500 ? 
-      query.substring(0, 500) + '...(truncated)' : 
-      query;
-    
-    console.log('🔍 Executing query:', {
-      query: fullQuery.replace(/\s+/g, ' ').trim(),
-      params: params?.slice(0, 10) || [] // 파라미터도 제한
-    });
-  } catch (error) {
-    // 로깅 에러는 무시
-  }
+// === 캐시 키 생성 ===
+function createCacheKey(query: string, params?: any[]): string {
+  const normalizedQuery = query.replace(/\s+/g, ' ').trim();
+  const paramsStr = params ? JSON.stringify(params) : '';
+  return `${normalizedQuery}:${paramsStr}`;
 }
 
-// 결과 로깅 (간소화)
-function logResult(result: any) {
-  if (isProduction) return;
+// === 캐시 조회 ===
+function getCachedResult(cacheKey: string): any | null {
+  const entry = queryCache.get(cacheKey);
+  if (!entry) return null;
   
-  try {
-    const count = Array.isArray(result) ? result.length : 
-                  result?.affectedRows !== undefined ? result.affectedRows :
-                  'unknown';
-    console.log(`✅ Query result count: ${count}`);
-  } catch (error) {
-    // 로깅 에러는 무시
+  const now = Date.now();
+  if (now - entry.timestamp > entry.ttl) {
+    queryCache.delete(cacheKey);
+    return null;
   }
+  
+  return entry.data;
 }
 
-export async function executeQuery<T extends RowDataPacket[]>(
-  query: string,
-  params?: any[],
-  ttl: number = 300000 // 5분 기본 TTL
-): Promise<T> {
-  const cacheKey = `${query}:${JSON.stringify(params)}`;
+// === 캐시 저장 ===
+function setCachedResult(cacheKey: string, data: any, customTtl?: number): void {
+  const ttl = customTtl || CACHE_TTL;
+  queryCache.set(cacheKey, {
+    data,
+    timestamp: Date.now(),
+    ttl
+  });
+}
+
+// === 재시도 로직 ===
+async function withRetry<T>(operation: () => Promise<T>, retries = MAX_RETRIES): Promise<T> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await operation();
+    } catch (error: any) {
+      if (attempt === retries) throw error;
+      
+      // 연결 관련 에러만 재시도
+      if (error.code === 'ECONNRESET' || error.code === 'ENOTFOUND' || error.code === 'ETIMEDOUT') {
+        await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
+        continue;
+      }
+      
+      throw error; // 즉시 실패
+    }
+  }
+  throw new Error('재시도 한도 초과');
+}
+
+// === 메인 쿼리 실행 함수 ===
+export async function executeQuery(
+  query: string, 
+  params: any[] = [],
+  options: { cache?: boolean; ttl?: number } = {}
+): Promise<any[]> {
   
-  // 중복 요청 확인
-  if (pendingQueries.has(cacheKey)) {
-    return pendingQueries.get(cacheKey);
+  // 1. 캐시 확인
+  const cacheKey = createCacheKey(query, params);
+  
+  if (options.cache !== false) {
+    const cached = getCachedResult(cacheKey);
+    if (cached !== null) {
+      return cached;
+    }
   }
   
-  // 캐시 확인
-  const cached = queryCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < cached.ttl) {
-    return cached.data;
+  // 2. 중복 쿼리 방지
+  if (activeQueries.has(cacheKey)) {
+    return activeQueries.get(cacheKey)!;
   }
   
-  // 새로운 쿼리 실행
+  // 3. 쿼리 실행
   const queryPromise = withRetry(async () => {
-    const pool = await getPool();
-    
-    logQuery(query, params);
+    const pool = getPool();
     
     // 타임아웃 설정
     const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Query timeout')), QUERY_TIMEOUT);
+      setTimeout(() => reject(new Error('쿼리 타임아웃')), QUERY_TIMEOUT);
     });
     
-    const queryPromise = pool.execute(query, params || []);
-    const [rows] = await Promise.race([queryPromise, timeoutPromise]) as [T, FieldPacket[]];
+    const queryPromise = pool.execute(query, params);
     
-    logResult(rows);
+    const [rows] = await Promise.race([queryPromise, timeoutPromise]) as [RowDataPacket[], FieldPacket[]];
     
-    // 캐시 저장
-    queryCache.set(cacheKey, {
-      data: rows,
-      timestamp: Date.now(),
-      ttl
-    });
+    // 개발 환경에서만 제한적 로깅
+    if (isDevelopment) {
+      console.log(`🔍 Executing query: {`);
+      console.log(`  query: '${query.slice(0, 200)}${query.length > 200 ? '...' : ''}',`);
+      console.log(`  params: [${params.map(p => typeof p === 'string' ? `'${p}'` : p).join(', ')}]`);
+      console.log(`}`);
+      console.log(`✅ Query result count: ${Array.isArray(rows) ? rows.length : 'N/A'}`);
+    }
     
-    return rows;
+    return Array.isArray(rows) ? rows : [];
   });
   
-  // 진행 중인 쿼리로 등록
-  pendingQueries.set(cacheKey, queryPromise);
+  // 4. 활성 쿼리에 등록
+  activeQueries.set(cacheKey, queryPromise);
   
   try {
     const result = await queryPromise;
-    return result;
-  } catch (error: any) {
-    // 에러 발생 시 stale cache 사용 시도
-    if (cached) {
-      if (!isProduction) {
-        console.warn('⚠️ 쿼리 에러, 캐시된 데이터 사용:', error.message);
-      }
-      return cached.data;
+    
+    // 5. 캐시 저장 (SELECT 쿼리만)
+    if (options.cache !== false && query.trim().toUpperCase().startsWith('SELECT')) {
+      setCachedResult(cacheKey, result, options.ttl);
     }
+    
+    return result;
+    
+  } catch (error: any) {
+    // 에러 시 캐시된 데이터 사용 (Stale-While-Revalidate)
+    if (options.cache !== false) {
+      const staleData = queryCache.get(cacheKey);
+      if (staleData) {
+        if (isDevelopment) {
+          console.warn('⚠️ 에러 발생, 캐시된 데이터 사용:', error.message);
+        }
+        return staleData.data;
+      }
+    }
+    
+    console.error('❌ 쿼리 실행 실패:', {
+      query: query.slice(0, 100),
+      params: params.slice(0, 3),
+      error: error.message
+    });
+    
     throw error;
+    
   } finally {
-    // 완료된 쿼리는 제거
-    pendingQueries.delete(cacheKey);
+    // 6. 활성 쿼리에서 제거
+    activeQueries.delete(cacheKey);
   }
 }
 
-export async function executeUpdate(
-  query: string,
-  params?: any[]
-): Promise<ResultSetHeader> {
-  return withRetry(async () => {
-    const pool = await getPool();
-    
-    logQuery(query, params);
-    
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Update timeout')), QUERY_TIMEOUT);
-    });
-    
-    const queryPromise = pool.execute(query, params || []);
-    const [result] = await Promise.race([queryPromise, timeoutPromise]) as [ResultSetHeader, FieldPacket[]];
-    
-    logResult(result);
-    
-    // 관련 캐시 무효화
-    for (const [key] of queryCache.entries()) {
-      if (key.includes(query.split(' ')[2]?.toLowerCase() || '')) {
-        queryCache.delete(key);
-      }
-    }
-    
-    return result;
-  });
-}
-
-export async function executeTransaction<T>(
-  operations: ((connection: any) => Promise<T>)
-): Promise<T> {
-  const pool = await getPool();
+// === 트랜잭션 실행 함수 ===
+export async function executeTransaction(operations: Array<{
+  query: string;
+  params?: any[];
+}>): Promise<any[]> {
+  
+  const pool = getPool();
   const connection = await pool.getConnection();
   
   try {
     await connection.beginTransaction();
-    const result = await operations(connection);
+    
+    const results: any[] = [];
+    
+    for (const op of operations) {
+      const [rows] = await connection.execute(op.query, op.params || []);
+      results.push(Array.isArray(rows) ? rows : []);
+    }
+    
     await connection.commit();
-    return result;
-  } catch (error) {
+    
+    if (isDevelopment) {
+      console.log(`✅ 트랜잭션 완료: ${operations.length}개 쿼리 실행`);
+    }
+    
+    return results;
+    
+  } catch (error: any) {
     await connection.rollback();
+    console.error('❌ 트랜잭션 실패:', error.message);
     throw error;
+    
   } finally {
     connection.release();
   }
 }
 
-// 캐시 관리 함수들
-export function clearQueryCache(): void {
+// === 캐시 관리 함수들 ===
+export function clearCache(): void {
   queryCache.clear();
-  if (!isProduction) {
-    console.log('🧹 쿼리 캐시 전체 삭제');
-  }
+  activeQueries.clear();
+  console.log('🧹 쿼리 캐시 전체 삭제');
 }
 
 export function getCacheStats() {
   return {
     size: queryCache.size,
-    maxSize: MAX_CACHE_SIZE,
-    pendingQueries: pendingQueries.size
+    activeQueries: activeQueries.size,
+    maxSize: MAX_CACHE_SIZE
   };
 }
 
-// 프로세스 종료 시 정리
-process.on('exit', () => {
+// === 프로세스 종료 시 정리 ===
+process.on('beforeExit', () => {
   if (cacheCleanupTimer) {
     clearInterval(cacheCleanupTimer);
+    cacheCleanupTimer = null;
   }
-});
-
-export default executeQuery; 
+  clearCache();
+}); 
