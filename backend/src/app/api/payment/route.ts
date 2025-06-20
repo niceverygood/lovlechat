@@ -119,8 +119,8 @@ export async function POST(request: NextRequest) {
     // 5. DB 연결 및 트랜잭션 시작
     connection = await pool.getConnection();
     
-    // 트랜잭션 명령어는 query() 메서드 사용 (prepared statement 호환성 문제 해결)
-    await connection.query('START TRANSACTION');
+    // 트랜잭션 시작 (올바른 방법)
+    await connection.beginTransaction();
     
     try {
       // 6. 결제 기록 저장 (execute() 메서드 사용)
@@ -153,8 +153,8 @@ export async function POST(request: NextRequest) {
         [userId, heartCount, 'purchase', `하트 충전 (결제: ${price}원)`, updatedHearts - heartCount, updatedHearts, imp_uid]
       );
       
-      // 10. 트랜잭션 커밋 (query() 메서드 사용)
-      await connection.query('COMMIT');
+      // 10. 트랜잭션 커밋 (올바른 방법)
+      await connection.commit();
       
       console.log('결제 완료:', { userId, heartCount, updatedHearts });
       
@@ -167,8 +167,8 @@ export async function POST(request: NextRequest) {
       });
       
     } catch (dbError) {
-      // 트랜잭션 롤백 (query() 메서드 사용)
-      await connection.query('ROLLBACK');
+      // 트랜잭션 롤백 (올바른 방법)
+      await connection.rollback();
       console.error('DB 트랜잭션 오류:', dbError);
       throw dbError;
     }
