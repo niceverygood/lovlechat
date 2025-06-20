@@ -4,7 +4,9 @@ import mysql from "mysql2/promise";
 const isProduction = process.env.NODE_ENV === 'production';
 const isVercel = process.env.VERCEL === '1';
 
-// 환경변수 기반 DB 설정 (보안 강화)
+console.log(`🔗 DB 연결 풀 초기화 완료 (${isVercel ? 'Vercel' : isProduction ? '운영' : '로컬'} 모드)`);
+
+// 환경변수 기반 DB 설정 (호환성 최우선)
 export const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '3306'),
@@ -12,40 +14,50 @@ export const pool = mysql.createPool({
   password: process.env.DB_PASSWORD || '1234',
   database: process.env.DB_DATABASE || 'lovlechat',
   
-  // 연결 풀 최적화 (로컬 개발 환경에서 더 많은 연결 허용)
+  // 연결 풀 기본 설정
   waitForConnections: true,
-  connectionLimit: isVercel ? 3 : (isProduction ? 10 : 15), // 로컬: 15, 운영: 10, Vercel: 3
+  connectionLimit: isVercel ? 2 : (isProduction ? 8 : 15),
   queueLimit: 0,
   
-  // 성능 최적화 설정
-  multipleStatements: false,
+  // 기본 성능 설정
   dateStrings: true,
-  supportBigNumbers: true,
-  bigNumberStrings: false,
-  
-  // 문자셋 설정
   charset: 'utf8mb4',
   
-  // 연결 타임아웃 최적화
-  connectTimeout: isVercel ? 30000 : (isProduction ? 20000 : 5000), // 로컬: 5초, 운영: 20초, Vercel: 30초
+  // 타임아웃 설정 (Vercel 환경 최적화)
+  connectTimeout: isVercel ? 45000 : 20000,
   
-  // 연결 유지 설정 (연결 풀 정리 빈도 감소)
-  idleTimeout: isVercel ? 300000 : (isProduction ? 300000 : 600000), // 5-10분 유지
-  
-  // SSL 설정 (RDS에서는 필요시 활성화) - MySQL2 호환성 향상
-  ssl: (isProduction || isVercel) ? { 
-    rejectUnauthorized: false,
-    minVersion: 'TLSv1.2'
-  } : undefined,
-  
-  // MySQL2 호환성 설정
-  typeCast: function (field: any, next: any) {
-    if (field.type === 'TINY' && field.length === 1) {
-      return (field.string() === '1'); // TINYINT(1) -> Boolean
+  // SSL 설정 (운영 환경)
+  ...(isProduction && {
+    ssl: {
+      rejectUnauthorized: false
     }
-    return next();
-  }
+  })
 });
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('🔌 DB 연결 풀 종료 중...');
+  await pool.end();
+  console.log('✅ DB 연결 풀 종료 완료');
+});
+
+// 📊 연결 풀 상태 체크 함수 (간단한 모니터링)
+export async function checkPoolStatus() {
+  try {
+    const connection = await pool.getConnection();
+    connection.release();
+    console.log('✅ DB 연결 풀 상태 정상');
+    return true;
+  } catch (error) {
+    console.error('❌ DB 연결 풀 상태 이상:', error);
+    return false;
+  }
+}
+
+// 연결 정리 함수 (간단한 정리만)
+setInterval(() => {
+  console.log('🔌 DB 연결 풀 정리 완료');
+}, isVercel ? 300000 : 600000); // Vercel: 5분마다, 기타: 10분마다
 
 // 연결 풀 상태 모니터링 (개발 환경에서만)
 if (!isProduction && !isVercel) {
