@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { executeQuery, executeMutation, executeQueryWithCache } from "@/lib/db-helper";
-import { successResponse, errorResponse, optionsResponse, fallbackResponse } from "@/lib/cors";
+import { successResponse, errorResponse, optionsResponse } from "@/lib/cors";
 
 /**
  * Persona API - 사용자가 생성한 멀티프로필 관리
@@ -15,6 +15,11 @@ import { successResponse, errorResponse, optionsResponse, fallbackResponse } fro
  * - 1명의 User가 여러 개의 Persona 생성 가능
  */
 
+// 환경별 설정
+const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
+const CACHE_DURATION = isVercel ? 240 : 120; // 4분/2분 캐싱
+const MAX_PERSONAS = isVercel ? 15 : 20; // Vercel에서는 더 적게
+
 function generatePersonaId() {
   return 'persona_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
@@ -28,21 +33,21 @@ export async function GET(req: NextRequest) {
 
   try {
     const personas = await executeQueryWithCache(
-      "SELECT id, userId, name, avatar, gender, age, job, createdAt FROM personas WHERE userId = ? ORDER BY createdAt DESC LIMIT 20",
-      [userId],
-      120, // 2분 캐시
-      3000
+      `SELECT id, userId, name, avatar, gender, age, job, createdAt FROM personas WHERE userId = ? ORDER BY createdAt DESC LIMIT ?`,
+      [userId, MAX_PERSONAS],
+      CACHE_DURATION
     );
 
     return successResponse({ personas: personas || [] });
-  } catch (error) {
-    console.error('Persona 조회 에러:', error);
+  } catch (error: any) {
+    console.error('Persona 조회 에러:', error.message);
     
-    // 폴백 데이터 제공
-    return fallbackResponse(
-      { personas: [] },
-      "페르소나 데이터를 불러오는 중 오류가 발생했습니다."
-    );
+    // 에러시 빈 배열 반환
+    return successResponse({ 
+      personas: [],
+      fallback: true,
+      message: "페르소나 데이터를 불러올 수 없습니다." 
+    });
   }
 }
 
@@ -70,25 +75,26 @@ export async function POST(req: NextRequest) {
     const result = await executeMutation(
       `INSERT INTO personas (id, userId, name, avatar, gender, age, job, createdAt) 
        VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [personaId, userId, normalizedData.name, normalizedData.avatar, normalizedData.gender, normalizedData.age, normalizedData.job],
-      5000
+      [personaId, userId, normalizedData.name, normalizedData.avatar, normalizedData.gender, normalizedData.age, normalizedData.job]
     );
 
     return successResponse({ 
       id: personaId,
-      message: '페르소나가 성공적으로 생성되었습니다!'
+      message: '페르소나가 성공적으로 생성되었습니다!',
+      persona: {
+        id: personaId,
+        userId,
+        ...normalizedData,
+        createdAt: new Date().toISOString()
+      }
     });
     
-  } catch (error) {
-    console.error('Persona 생성 에러:', error);
+  } catch (error: any) {
+    console.error('Persona 생성 에러:', error.message);
     
-    // 폴백 처리
-    const tempId = generatePersonaId();
-    return fallbackResponse(
-      { 
-        id: tempId,
-        message: '페르소나가 임시 생성되었습니다. 잠시 후 다시 확인해주세요.'
-      }
+    return errorResponse(
+      "페르소나 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+      500
     );
   }
 }

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { executeQuery, executeMutation, executeQueryWithCache, parseJsonSafely } from "@/lib/db-helper";
-import { successResponse, errorResponse, optionsResponse, fallbackResponse } from "@/lib/cors";
+import { successResponse, errorResponse, optionsResponse } from "@/lib/cors";
 
 /**
  * Character API - AI 상대방 캐릭터 관리 (최적화됨)
@@ -15,6 +15,13 @@ import { successResponse, errorResponse, optionsResponse, fallbackResponse } fro
  * - User가 직접 생성하거나 미리 만들어진 캐릭터
  * - User의 여러 Persona로 동일한 Character와 채팅 가능
  */
+
+// 환경별 설정
+const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
+const CACHE_DURATION_USER = isVercel ? 240 : 180; // 4분/3분
+const CACHE_DURATION_PUBLIC = isVercel ? 600 : 300; // 10분/5분
+const MAX_USER_CHARACTERS = isVercel ? 8 : 10; // 사용자 캐릭터 제한
+const MAX_PUBLIC_CHARACTERS = isVercel ? 4 : 5; // 공개 캐릭터 제한
 
 // 데이터 정규화 함수
 function normalizeCharacterData(data: any) {
@@ -56,19 +63,6 @@ const FALLBACK_CHARACTERS = [
     attachments: null,
     firstScene: "카페",
     firstMessage: "안녕하세요! 오늘 하루는 어떠셨나요?",
-    backgroundImg: "/imgdefault.jpg"
-  },
-  {
-    id: "2", 
-    profileImg: "/imgdefault.jpg",
-    name: "김태연",
-    age: "35",
-    job: "가수",
-    oneLiner: "소녀시대 태연입니다!",
-    selectedTags: ["리더십", "실력파", "카리스마"],
-    attachments: null,
-    firstScene: "연습실",
-    firstMessage: "안녕! 오늘도 열심히 해보자!",
     backgroundImg: "/imgdefault.jpg"
   }
 ];
@@ -113,8 +107,7 @@ export async function POST(req: NextRequest) {
         normalizedData.firstScene,
         normalizedData.firstMessage,
         normalizedData.backgroundImg
-      ],
-      6000 // 타임아웃 최적화
+      ]
     );
     
     const [insertResult] = result as any;
@@ -124,15 +117,13 @@ export async function POST(req: NextRequest) {
       message: "캐릭터가 성공적으로 생성되었습니다!"
     });
     
-  } catch (err) {
-    console.error("Character creation error:", err);
+  } catch (err: any) {
+    console.error("Character creation error:", err.message);
     
-    // 폴백 처리
-    const tempId = Date.now();
-    return fallbackResponse({ 
-      id: tempId,
-      message: "캐릭터가 임시 저장되었습니다. 잠시 후 다시 확인해주세요."
-    });
+    return errorResponse(
+      "캐릭터 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
+      500
+    );
   }
 }
 
@@ -147,10 +138,9 @@ export async function GET(req: NextRequest) {
                 likes, dislikes, firstScene, firstMessage, backgroundImg 
          FROM character_profiles 
          WHERE userId = ?
-         ORDER BY createdAt DESC LIMIT 10`,
-        [userId],
-        180, // 3분 캐시
-        5000
+         ORDER BY createdAt DESC LIMIT ?`,
+        [userId, MAX_USER_CHARACTERS],
+        CACHE_DURATION_USER
       );
       
       // 프론트엔드 호환성을 위해 selectedTags 및 like/dislike 필드 변환
@@ -170,10 +160,9 @@ export async function GET(req: NextRequest) {
               likes, dislikes, firstScene, firstMessage, backgroundImg 
        FROM character_profiles 
        WHERE scope = '공개' 
-       ORDER BY RAND() LIMIT 5`,
-      [],
-      300, // 5분 캐시
-      4000
+       ORDER BY RAND() LIMIT ?`,
+      [MAX_PUBLIC_CHARACTERS],
+      CACHE_DURATION_PUBLIC
     );
     
     // 프론트엔드 호환성을 위해 selectedTags 및 like/dislike 필드 변환
@@ -186,13 +175,15 @@ export async function GET(req: NextRequest) {
     
     return successResponse({ characters: charactersWithSelectedTags });
     
-  } catch (err) {
-    console.error("Character GET error:", err);
+  } catch (err: any) {
+    console.error("Character GET error:", err.message);
     
     // 폴백 데이터 반환
-    return fallbackResponse({ 
-      characters: FALLBACK_CHARACTERS 
-    }, "데이터를 임시로 제공하고 있습니다.");
+    return successResponse({ 
+      characters: FALLBACK_CHARACTERS,
+      fallback: true,
+      message: "캐릭터 데이터를 불러올 수 없습니다."
+    });
   }
 }
 
