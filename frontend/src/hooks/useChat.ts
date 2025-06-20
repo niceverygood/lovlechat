@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { API_BASE_URL } from '../lib/openai';
 
 export interface Msg {
@@ -15,33 +15,50 @@ export interface Msg {
   timestamp?: string;
 }
 
-export function useChat(characterId: string, personaId: string) {
+export function useChat(
+  characterId: string, 
+  personaId: string, 
+  personaAvatar?: string, 
+  userId?: string,
+  consumeHearts?: (amount: number, description: string, relatedId?: string) => Promise<boolean>
+) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [favor, setFavor] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [backgroundImageUrl, setBackgroundImageUrl] = useState<string | null>(null);
   const retryCountRef = useRef(0);
-  const lastMessageIdRef = useRef<string | null>(null);
-  const MAX_RETRIES = 2;
+  const MAX_RETRIES = 1; // 2 → 1 (빠른 에러 처리)
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // 에러 상태 초기화
   const clearError = useCallback(() => {
     setError(null);
   }, []);
 
-  // 메시지 불러오기 최적화 (에러 처리 및 성능 강화)
+  // 의존성 배열 메모이제이션 (불필요한 재요청 방지)
+  const deps = useMemo(() => ({ characterId, personaId }), [characterId, personaId]);
+  
+  // 메시지 불러오기 최적화 (중복 요청 방지 및 성능 강화)
   useEffect(() => {
-    if (!characterId || !personaId) return;
+    if (!deps.characterId || !deps.personaId) return;
     
     const controller = new AbortController();
+    abortControllerRef.current = controller;
     let isMounted = true;
     
     const loadMessages = async () => {
       try {
         clearError();
+        
+        // 중복 요청 방지
+        if (loading) return;
+        
+        console.log('Loading messages for:', deps);
+        
         const response = await fetch(
-          `${API_BASE_URL}/api/chat/${characterId}?personaId=${personaId}`,
+          `${API_BASE_URL}/api/chat/${deps.characterId}?personaId=${deps.personaId}`,
           { 
             signal: controller.signal,
             headers: {
@@ -53,10 +70,12 @@ export function useChat(characterId: string, personaId: string) {
         
         if (!response.ok) {
           const errorText = await response.text();
+          console.error('Message loading error response:', errorText);
           throw new Error(`HTTP ${response.status}: ${errorText || '서버 응답 오류'}`);
         }
         
         const data = await response.json();
+        console.log('Loaded messages:', data);
         
         if (!isMounted) return;
         
@@ -72,12 +91,15 @@ export function useChat(characterId: string, personaId: string) {
           }));
           
           setMessages(formattedMessages);
-          setFavor(data.favor || 0);
+          if (typeof data.favor === 'number') {
+            setFavor(data.favor);
+          }
           
           if (data.fallback) {
             console.warn("채팅 데이터를 폴백으로 로드했습니다.");
           }
         } else {
+          console.error('Message loading error data:', data);
           throw new Error(data.error || "메시지 로드에 실패했습니다.");
         }
       } catch (err: any) {
@@ -87,11 +109,7 @@ export function useChat(characterId: string, personaId: string) {
         
         if (isMounted) {
           setError(err.message || "메시지를 불러오는 중 오류가 발생했습니다.");
-          // 에러 발생시 기본 메시지 표시
-          setMessages([{
-            sender: "system",
-            text: "채팅을 불러오는 중 문제가 발생했습니다. 새로고침하거나 잠시 후 다시 시도해주세요."
-          }]);
+          setMessages([]);
         }
       }
     };
@@ -101,22 +119,45 @@ export function useChat(characterId: string, personaId: string) {
     return () => {
       isMounted = false;
       controller.abort();
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
     };
-  }, [characterId, personaId, clearError]);
+  }, [deps, clearError, loading]);
 
-  // 메시지 전송 최적화 (재시도 로직 및 낙관적 업데이트)
+  // 메시지 전송 최적화 (중복 전송 방지 및 낙관적 업데이트)
   const sendMessage = useCallback(async (message: string) => {
     if (!message.trim() || loading) return;
     
     const messageText = message.trim();
+    
+    // 하트 사용 시도 (10하트 소모) - 게스트 모드는 제외
+    if (consumeHearts && userId && personaId !== 'guest') {
+      const heartUsed = await consumeHearts(10, `${personaId}와 ${characterId} 대화`, `${personaId}_${characterId}`);
+      if (!heartUsed) {
+        // 하트 사용 실패 (부족하거나 에러)
+        return;
+      }
+    }
+    
+    // 진행 중인 요청 취소
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
     setInput("");
     setLoading(true);
     clearError();
+    
+    // 새로운 AbortController 생성
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     
     // 낙관적 업데이트 (사용자 메시지 즉시 표시)
     const userMessage: Msg = {
       sender: "user",
       text: messageText,
+      avatar: personaAvatar,
       timestamp: new Date().toISOString()
     };
     
@@ -135,8 +176,10 @@ export function useChat(characterId: string, personaId: string) {
             characterId,
             personaId,
             message: messageText,
-            sender: "user"
+            sender: "user",
+            userId: personaId === 'guest' ? null : userId // 게스트 모드일 때는 userId를 null로 전달
           }),
+          signal: controller.signal // AbortController 추가
         });
 
         if (!response.ok) {
@@ -158,6 +201,35 @@ export function useChat(characterId: string, personaId: string) {
           // 호감도 업데이트
           if (data.favorDelta && data.favorDelta !== 0) {
             setFavor(prev => Math.max(0, Math.min(100, prev + data.favorDelta)));
+          }
+          
+          // 배경 이미지 생성 트리거
+          if (data.backgroundImageUrl === "generating") {
+            console.log("🎨 배경 이미지 생성 중...");
+            // 약간의 딜레이 후 실제 이미지를 가져옴
+            setTimeout(async () => {
+              try {
+                const bgResponse = await fetch(`${API_BASE_URL}/api/chat/generate-background`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    character: { id: characterId, firstScene: null }, // 실제 캐릭터 정보는 백엔드에서 가져옴
+                    recentMessages: [messageText, data.aiText],
+                    currentMood: data.favorDelta > 30 ? '기쁨' : data.favorDelta < -10 ? '슬픔' : '평온'
+                  })
+                });
+                
+                if (bgResponse.ok) {
+                  const bgData = await bgResponse.json();
+                  if (bgData.ok && bgData.imageUrl) {
+                    console.log("🎨 배경 이미지 생성 완료:", bgData.imageUrl);
+                    setBackgroundImageUrl(bgData.imageUrl);
+                  }
+                }
+              } catch (err) {
+                console.warn("배경 이미지 생성 실패:", err);
+              }
+            }, 3000); // 3초 후 이미지 생성 완료 확인
           }
           
           retryCountRef.current = 0; // 성공시 재시도 횟수 초기화
@@ -188,8 +260,11 @@ export function useChat(characterId: string, personaId: string) {
       await attemptSend(0);
     } finally {
       setLoading(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
     }
-  }, [characterId, personaId, loading, clearError]);
+  }, [characterId, personaId, loading, clearError, personaAvatar, consumeHearts, userId]);
 
   // 채팅 내역 삭제 (확인 다이얼로그 포함)
   const clearChat = useCallback(async () => {
@@ -231,6 +306,7 @@ export function useChat(characterId: string, personaId: string) {
     loading,
     favor,
     error,
+    backgroundImageUrl,
     clearError,
     clearChat,
     refreshMessages,

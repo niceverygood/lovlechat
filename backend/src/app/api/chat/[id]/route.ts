@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { executeQuery } from "@/lib/db-helper";
+import { successResponse, errorResponse, optionsResponse, fallbackResponse } from "@/lib/cors";
 
 // 폴백 메시지 데이터
 const fallbackMessages = [
@@ -26,32 +27,12 @@ export async function GET(req: NextRequest, context: any) {
   
   // 입력 검증 강화
   if (!characterId || !personaId) {
-    return NextResponse.json(
-      { ok: false, error: "characterId와 personaId가 모두 필요합니다." },
-      { 
-        status: 400,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
-      }
-    );
+    return errorResponse("characterId와 personaId가 모두 필요합니다.", 400);
   }
   
-  // ID 형식 검증
-  if (isNaN(Number(characterId)) || isNaN(Number(personaId))) {
-    return NextResponse.json(
-      { ok: false, error: "유효한 숫자 형식의 ID가 필요합니다." },
-      { 
-        status: 400,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
-      }
-    );
+  // characterId만 숫자 검증 (personaId는 문자열)
+  if (isNaN(Number(characterId))) {
+    return errorResponse("유효한 숫자 형식의 characterId가 필요합니다.", 400);
   }
 
   try {
@@ -64,14 +45,14 @@ export async function GET(req: NextRequest, context: any) {
          FROM chats 
          WHERE personaId = ? AND characterId = ? 
          ORDER BY createdAt ASC 
-         LIMIT 100`, // 메시지 수 제한으로 성능 향상
+         LIMIT 100`,
         [personaId, characterId],
-        4000 // 타임아웃 단축 (5초 → 4초)
+        3000 // 타임아웃 최적화
       ),
       executeQuery(
         "SELECT favor FROM character_favors WHERE personaId = ? AND characterId = ?",
         [personaId, characterId],
-        2000 // 호감도 조회는 더 빠르게
+        1500 // 호감도 조회는 더 빠르게
       )
     ]);
     
@@ -93,71 +74,33 @@ export async function GET(req: NextRequest, context: any) {
       console.warn("호감도 조회 실패 (비치명적):", favorResult.reason);
     }
     
-    return NextResponse.json(
-      { 
-        ok: true, 
-        messages, 
-        favor,
-        total: messages.length,
-        characterId: Number(characterId),
-        personaId: Number(personaId)
-      },
-      {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
-      }
-    );
+    return successResponse({ 
+      messages, 
+      favor,
+      total: messages.length,
+      characterId: Number(characterId),
+      personaId: personaId // 문자열 그대로 반환
+    });
+    
   } catch (err: any) {
     console.error("채팅 조회 에러:", err);
     
     // 타임아웃 에러시 폴백 데이터 반환
     if (err.message?.includes('TIMEOUT')) {
-      console.log("채팅 조회 타임아웃, 폴백 데이터 반환");
-      return NextResponse.json(
-        { 
-          ok: true, 
-          messages: fallbackMessages, 
-          favor: 0, 
-          fallback: true,
-          total: fallbackMessages.length
-        },
-        {
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          }
-        }
-      );
+      return fallbackResponse({ 
+        messages: fallbackMessages, 
+        favor: 0,
+        total: fallbackMessages.length,
+        characterId: Number(characterId),
+        personaId: personaId
+      }, "네트워크 지연으로 기본 데이터를 표시합니다.");
     }
     
     // 기타 에러는 서버 에러로 처리
-    return NextResponse.json(
-      { ok: false, error: "채팅 내역을 불러오는 중 오류가 발생했습니다." },
-      { 
-        status: 500,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
-      }
-    );
+    return errorResponse("채팅 내역을 불러오는 중 오류가 발생했습니다.", 500);
   }
 }
 
 export async function OPTIONS() {
-  return NextResponse.json(
-    {},
-    {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      },
-    }
-  );
+  return optionsResponse();
 } 

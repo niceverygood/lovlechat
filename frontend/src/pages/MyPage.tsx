@@ -5,15 +5,33 @@ import { FiSettings } from "react-icons/fi";
 import ProfileEditModal from "../components/ProfileEditModal";
 import CharacterEditModal from "../components/CharacterEditModal";
 import ProfileDetailModal from "../components/ProfileDetailModal";
-import { signOut } from "firebase/auth";
-import { auth } from "../firebase";
+import { signOutUser } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
+import { useHearts } from "../hooks/useHearts";
 import { API_BASE_URL } from '../lib/openai';
+import CustomAlert from '../components/CustomAlert';
 
 interface Character {
   id: number;
-  profileImg: string;
-  name: string;
+  profileImg?: string | null;
+  name?: string;
+  tags?: string[] | string;
+  selectedTags?: string[];
+  category?: string;
+  gender?: string;
+  scope?: string;
+  age?: string | number;
+  job?: string;
+  oneLiner?: string;
+  background?: string;
+  personality?: string;
+  habit?: string;
+  like?: string;
+  dislike?: string;
+  extraInfos?: string[];
+  firstScene?: string;
+  firstMessage?: string;
+  backgroundImg?: string | null;
 }
 
 interface Persona {
@@ -50,7 +68,8 @@ function HeartButton({ count }: { count: number }) {
 
 export default function MyPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const { hearts, loading: heartsLoading } = useHearts(user?.uid || null);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
@@ -67,30 +86,57 @@ export default function MyPage() {
   const [followerCount, setFollowerCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertMsg, setAlertMsg] = useState('');
+  const [alertTitle, setAlertTitle] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!userId) return; // userId가 없으면 API 호출하지 않음
-
-    // 멀티프로필 목록 불러오기
-    fetch(`${API_BASE_URL}/api/persona?userId=${userId}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.ok && data.personas.length > 0) {
-          // 기본 프로필(userId와 같은 id를 가진 것) 찾기
-          const defaultPersona = data.personas.find((p: Persona) => p.id === userId);
-          if (defaultPersona) {
-            setUserProfile({ name: defaultPersona.name, avatar: defaultPersona.avatar });
-          }
-          setPersonas(data.personas);
-        }
-      });
-
-    // 내 캐릭터 목록 불러오기
-    fetch(`${API_BASE_URL}/api/character?userId=${userId}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.ok) setCharacters(data.characters);
-      });
+    // Wait for auth to finish loading
+    if (authLoading) {
+      return;
+    }
+    
+    if (!userId) {
+      console.log('userId가 없음:', userId, 'user:', user);
+      setLoading(false);
+      return;
+    }
+    console.log('MyPage 데이터 로딩 시작, userId:', userId);
+    setLoading(true);
+    Promise.all([
+      fetch(`${API_BASE_URL}/api/persona?userId=${userId}`).then(res => res.json()),
+      fetch(`${API_BASE_URL}/api/character?userId=${userId}`).then(res => res.json())
+    ]).then(([personaData, characterData]) => {
+      console.log('API 응답 - personaData:', personaData);
+      console.log('API 응답 - characterData:', characterData);
+      
+      if (personaData.ok) {
+        console.log('페르소나 설정:', personaData.personas);
+        setPersonas(personaData.personas || []);
+      }
+      if (characterData.ok) {
+        console.log('캐릭터 설정:', characterData.characters);
+        const charactersWithTags = characterData.characters.map((char: any) => ({
+          ...char,
+          selectedTags: Array.isArray(char.tags)
+            ? char.tags
+            : (typeof char.tags === 'string' && char.tags.startsWith('['))
+              ? JSON.parse(char.tags)
+              : (typeof char.tags === 'string' && char.tags.length > 0)
+                ? char.tags.split(',').map((t: string) => t.trim())
+                : [],
+        }));
+        setCharacters(charactersWithTags);
+      }
+      setLoading(false);
+    }).catch(error => {
+      console.error('데이터 로딩 오류:', error);
+      setLoading(false);
+      setAlertTitle('오류');
+      setAlertMsg('데이터를 불러오는 중 오류가 발생했습니다.');
+      setAlertOpen(true);
+    });
 
     // 사용자 프로필 정보 불러오기 (localStorage에서)
     const savedUserProfile = localStorage.getItem('userProfile');
@@ -102,7 +148,7 @@ export default function MyPage() {
     // 팔로워/팔로잉 수 불러오기 (추후 실제 API 연동)
     setFollowerCount(2);
     setFollowingCount(0);
-  }, [userId, user?.displayName]);
+  }, [userId, authLoading]);
 
   const handleUserProfileImageClick = () => {
     fileInputRef.current?.click();
@@ -149,12 +195,8 @@ export default function MyPage() {
       console.log('fetchPersonas 응답:', data); // 디버깅용
       
       if (data.ok) {
-        setPersonas(data.personas || []); // 빈 배열도 허용
-        // 기본 프로필도 갱신
-        const defaultPersona = data.personas?.find((p: Persona) => p.id === userId);
-        if (defaultPersona) {
-          setUserProfile({ name: defaultPersona.name, avatar: defaultPersona.avatar });
-        }
+        // Persona는 순수하게 User가 생성한 멀티프로필만 관리
+        setPersonas(data.personas || []);
       } else {
         console.error('페르소나 조회 실패:', data.error);
       }
@@ -184,24 +226,22 @@ export default function MyPage() {
       if (response.ok) {
         setShowProfileEditModal(false);
         await fetchPersonas(); // 최신 목록으로 갱신
-        alert('프로필이 성공적으로 수정되었습니다.');
+        setAlertTitle('성공');
+        setAlertMsg('프로필이 성공적으로 수정되었습니다.');
+        setAlertOpen(true);
       } else {
         throw new Error('프로필 수정에 실패했습니다.');
       }
     } catch (error) {
       console.error('프로필 수정 오류:', error);
-      alert('프로필 수정 중 오류가 발생했습니다.');
+      setAlertTitle('오류');
+      setAlertMsg('프로필 수정 중 오류가 발생했습니다.');
+      setAlertOpen(true);
     }
   };
 
   // 멀티프로필 생성 핸들러
   const handleProfileCreate = async (newProfile: Persona) => {
-    // 기본 프로필(userId === id)은 생성이 아니라 수정만 허용
-    if (newProfile.id === userId) {
-      await handleProfileSave(newProfile);
-      setShowProfileCreateModal(false);
-      return;
-    }
     try {
       const response = await fetch(`${API_BASE_URL}/api/persona`, {
         method: 'POST',
@@ -227,130 +267,53 @@ export default function MyPage() {
         // 약간 지연 후 목록 갱신 (UI 안정성)
         setTimeout(async () => {
           await fetchPersonas();
-          alert('프로필이 성공적으로 생성되었습니다.');
+          setAlertTitle('성공');
+          setAlertMsg('프로필이 성공적으로 생성되었습니다.');
+          setAlertOpen(true);
         }, 100);
       } else {
         throw new Error('프로필 생성에 실패했습니다.');
       }
     } catch (error) {
-      alert('프로필 생성 중 오류가 발생했습니다.');
+      setAlertTitle('오류');
+      setAlertMsg('프로필 생성 중 오류가 발생했습니다.');
+      setAlertOpen(true);
     }
   };
 
   return (
     <div style={{ background: "var(--color-bg)", minHeight: "100vh", paddingBottom: 80 }}>
-      {/* 상단 계정(관리용) 프로필 카드 */}
-      <div style={{
-        background: "var(--color-card)",
-        borderRadius: 20,
-        margin: "24px 20px 0 20px",
-        padding: 20,
-        boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between"
-      }}>
-        <div style={{ display: "flex", alignItems: "center" }}>
-          <img
-            src={userProfile.avatar || DEFAULT_PROFILE_IMG}
-            alt="프로필"
-            style={{ width: 60, height: 60, borderRadius: "50%", marginRight: 16, objectFit: "cover", background: "#222", border: "2px solid #333", cursor: "pointer" }}
-            onClick={() => setShowProfileDetailModal(true)}
-            onError={e => {
-              if (!e.currentTarget.src.endsWith("/imgdefault.jpg")) {
-              e.currentTarget.onerror = null;
-                e.currentTarget.src = "/imgdefault.jpg";
-              }
-            }}
-          />
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 20 }}>{userProfile.name}</div>
-            <HeartButton count={35} />
-          </div>
+      {loading ? (
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          minHeight: '50vh',
+          color: '#fff',
+          fontSize: 18,
+          fontWeight: 600
+        }}>
+          데이터를 불러오는 중...
         </div>
-        <div style={{ textAlign: "right", display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
-          <button
-            onClick={() => setShowUserProfileEditModal(true)}
-            style={{ background: '#fff', border: 'none', color: '#222', fontWeight: 600, fontSize: 15, cursor: 'pointer', borderRadius: 16, padding: '8px 18px', marginBottom: 8 }}
-          >
-            내 프로필
-          </button>
-          <button
-            onClick={() => setShowSettingsModal(true)}
-            style={{ background: 'none', border: 'none', color: '#888', fontSize: 24, cursor: 'pointer', padding: 0 }}
-            aria-label="설정"
-            title="설정"
-          >
-            {typeof FiSettings === 'function' ? <FiSettings /> : null}
-          </button>
-        </div>
-      </div>
-      {/* 멀티프로필 섹션 */}
-      <div style={{ marginTop: 24, padding: "0 20px" }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>멀티프로필</div>
-          <button
-            onClick={() => setShowProfileCreateModal(true)}
-            disabled={personas.length >= 10}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: personas.length >= 10 ? '#888' : '#bbb',
-              fontWeight: 600,
-              fontSize: 16,
-              cursor: personas.length >= 10 ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center'
-            }}
-            title={personas.length >= 10 ? '최대 10개까지 생성할 수 있습니다.' : ''}
-          >
-            <span style={{ fontSize: 22, marginRight: 6 }}>+</span> 멀티프로필 만들기 ({personas.filter(p => p.id !== userId && p.name !== userId && p.name !== "user_74127").length}/10)
-          </button>
-        </div>
-        {/* 멀티프로필 리스트 (기본 프로필 제외, 멀티프로필만) */}
-        {personas.filter(p => p.id !== userId && p.name !== userId && p.name !== "user_74127").map((p) => (
-          <div key={p.id} style={{ display: "flex", alignItems: "center", background: "var(--color-card-alt)", borderRadius: 12, padding: 12, marginBottom: 10 }}>
-                <img
-                  src={p.avatar || DEFAULT_PROFILE_IMG}
-                  alt={p.name}
-              style={{ width: 40, height: 40, borderRadius: "50%", marginRight: 12, objectFit: "cover", background: "#222", border: "1.5px solid #333", cursor: 'pointer' }}
-              onClick={() => { setSelectedProfile(p); setShowProfileDetailModal(true); }}
-                  onError={e => {
-                if (!e.currentTarget.src.endsWith("/imgdefault.jpg")) {
-                    e.currentTarget.onerror = null;
-                  e.currentTarget.src = "/imgdefault.jpg";
-                }
-                  }}
-                />
-              <span style={{ fontWeight: 600, fontSize: 16 }}>{p.name}</span>
-            <button
-              style={{ marginLeft: "auto", color: "#4CAF50", background: "none", border: "none", fontSize: 16, cursor: "pointer" }}
-              onClick={() => handleProfileEdit(p)}
-            >수정</button>
-            <button
-              style={{ color: "#ff4081", background: "none", border: "none", fontSize: 16, cursor: "pointer", marginLeft: 8 }}
-              onClick={async () => {
-                if (window.confirm("정말로 삭제하시겠습니까?")) {
-                  await fetch(`${API_BASE_URL}/api/persona/${p.id}`, { method: "DELETE" });
-                  setPersonas(prev => prev.filter(x => x.id !== p.id));
-                }
-              }}
-            >삭제</button>
-            </div>
-          ))}
-        </div>
-      <div style={{ padding: "0 20px", fontWeight: 700, fontSize: 18, marginTop: 24 }}>내 캐릭터</div>
-      <div style={{ padding: "0 20px" }}>
-        {characters.length === 0 ? (
-          <div style={{ color: "var(--color-subtext)" }}>아직 만든 캐릭터가 없습니다.</div>
-        ) : (
-          characters.map(char => (
-            <div key={char.id} style={{ display: "flex", alignItems: "center", background: "var(--color-card)", borderRadius: 12, padding: 12, marginBottom: 12 }}>
+      ) : (
+        <>
+          {/* 상단 계정(관리용) 프로필 카드 */}
+          <div style={{
+            background: "var(--color-card)",
+            borderRadius: 20,
+            margin: "24px 20px 0 20px",
+            padding: 20,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between"
+          }}>
+            <div style={{ display: "flex", alignItems: "center" }}>
               <img
-                src={char.profileImg || DEFAULT_PROFILE_IMG}
-                alt={char.name}
-                style={{ width: 48, height: 48, borderRadius: "50%", marginRight: 12, objectFit: "cover", cursor: "pointer" }}
-                onClick={() => navigate(`/character/${char.id}`)}
+                src={userProfile.avatar || DEFAULT_PROFILE_IMG}
+                alt="프로필"
+                style={{ width: 60, height: 60, borderRadius: "50%", marginRight: 16, objectFit: "cover", background: "#222", border: "2px solid #333", cursor: "pointer" }}
+                onClick={() => setShowProfileDetailModal(true)}
                 onError={e => {
                   if (!e.currentTarget.src.endsWith("/imgdefault.jpg")) {
                   e.currentTarget.onerror = null;
@@ -358,27 +321,124 @@ export default function MyPage() {
                   }
                 }}
               />
-              <span style={{ fontWeight: 600, fontSize: 16 }}>{char.name}</span>
-              <button 
-                style={{ marginLeft: "auto", marginRight: 12, color: "#4CAF50", background: "none", border: "none", fontSize: 16, cursor: "pointer" }}
-                onClick={() => { setSelectedCharacter(char); setShowCharacterEditModal(true); }}
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 20 }}>{userProfile.name}</div>
+                <HeartButton count={heartsLoading ? 0 : hearts} />
+              </div>
+            </div>
+            <div style={{ textAlign: "right", display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+              <button
+                onClick={() => setShowUserProfileEditModal(true)}
+                style={{ background: '#fff', border: 'none', color: '#222', fontWeight: 600, fontSize: 15, cursor: 'pointer', borderRadius: 16, padding: '8px 18px', marginBottom: 8 }}
+              >
+                내 프로필
+              </button>
+              <button
+                onClick={() => setShowSettingsModal(true)}
+                style={{ background: 'none', border: 'none', color: '#888', fontSize: 24, cursor: 'pointer', padding: 0 }}
+                aria-label="설정"
+                title="설정"
+              >
+                {typeof FiSettings === 'function' ? <FiSettings /> : null}
+              </button>
+            </div>
+          </div>
+          {/* 멀티프로필 섹션 */}
+          <div style={{ marginTop: 24, padding: "0 20px" }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>멀티프로필</div>
+              <button
+                onClick={() => setShowProfileCreateModal(true)}
+                disabled={personas.length >= 10}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: personas.length >= 10 ? '#888' : '#bbb',
+                  fontWeight: 600,
+                  fontSize: 16,
+                  cursor: personas.length >= 10 ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}
+                title={personas.length >= 10 ? '최대 10개까지 생성할 수 있습니다.' : ''}
+              >
+                <span style={{ fontSize: 22, marginRight: 6 }}>+</span> 멀티프로필 만들기 ({personas.length}/10)
+              </button>
+            </div>
+            {/* 멀티프로필 리스트 */}
+            {personas.map((p) => (
+              <div key={p.id} style={{ display: "flex", alignItems: "center", background: "var(--color-card-alt)", borderRadius: 12, padding: 12, marginBottom: 10 }}>
+                    <img
+                      src={p.avatar || DEFAULT_PROFILE_IMG}
+                      alt={p.name}
+                  style={{ width: 40, height: 40, borderRadius: "50%", marginRight: 12, objectFit: "cover", background: "#222", border: "1.5px solid #333", cursor: 'pointer' }}
+                  onClick={() => { setSelectedProfile(p); setShowProfileDetailModal(true); }}
+                    onError={e => {
+                  if (!e.currentTarget.src.endsWith("/imgdefault.jpg")) {
+                      e.currentTarget.onerror = null;
+                    e.currentTarget.src = "/imgdefault.jpg";
+                  }
+                    }}
+                  />
+                <span style={{ fontWeight: 600, fontSize: 16 }}>{p.name}</span>
+              <button
+                style={{ marginLeft: "auto", color: "#4CAF50", background: "none", border: "none", fontSize: 16, cursor: "pointer" }}
+                onClick={() => handleProfileEdit(p)}
               >수정</button>
-              <button 
-                style={{ color: "#ff4081", background: "none", border: "none", fontSize: 16, cursor: "pointer" }}
+              <button
+                style={{ color: "#ff4081", background: "none", border: "none", fontSize: 16, cursor: "pointer", marginLeft: 8 }}
                 onClick={async () => {
                   if (window.confirm("정말로 삭제하시겠습니까?")) {
-                    await fetch(`${API_BASE_URL}/api/character/${char.id}?userId=${userId}`, { method: "DELETE" });
-                    // 삭제(숨김) 후 목록을 서버에서 다시 fetch
-                    const res = await fetch(`${API_BASE_URL}/api/character?userId=${userId}`);
-                    const data = await res.json();
-                    if (data.ok) setCharacters(data.characters);
+                    await fetch(`${API_BASE_URL}/api/persona/${p.id}`, { method: "DELETE" });
+                    setPersonas(prev => prev.filter(x => x.id !== p.id));
                   }
                 }}
               >삭제</button>
-            </div>
-          ))
-        )}
-      </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ padding: "0 20px", fontWeight: 700, fontSize: 18, marginTop: 24 }}>내 캐릭터</div>
+          <div style={{ padding: "0 20px" }}>
+            {characters.length === 0 ? (
+              <div style={{ color: "var(--color-subtext)" }}>아직 만든 캐릭터가 없습니다.</div>
+            ) : (
+              characters.map(char => (
+                <div key={char.id} style={{ display: "flex", alignItems: "center", background: "var(--color-card)", borderRadius: 12, padding: 12, marginBottom: 12 }}>
+                  <img
+                    src={char.profileImg || DEFAULT_PROFILE_IMG}
+                    alt={char.name}
+                    style={{ width: 48, height: 48, borderRadius: "50%", marginRight: 12, objectFit: "cover", cursor: "pointer" }}
+                    onClick={() => navigate(`/character/${char.id}`)}
+                    onError={e => {
+                      if (!e.currentTarget.src.endsWith("/imgdefault.jpg")) {
+                      e.currentTarget.onerror = null;
+                        e.currentTarget.src = "/imgdefault.jpg";
+                      }
+                    }}
+                  />
+                  <span style={{ fontWeight: 600, fontSize: 16 }}>{char.name}</span>
+                  <button 
+                    style={{ marginLeft: "auto", marginRight: 12, color: "#4CAF50", background: "none", border: "none", fontSize: 16, cursor: "pointer" }}
+                    onClick={() => { setSelectedCharacter(char); setShowCharacterEditModal(true); }}
+                  >수정</button>
+                  <button 
+                    style={{ color: "#ff4081", background: "none", border: "none", fontSize: 16, cursor: "pointer" }}
+                    onClick={async () => {
+                      if (window.confirm("정말로 삭제하시겠습니까?")) {
+                        await fetch(`${API_BASE_URL}/api/character/${char.id}?userId=${userId}`, { method: "DELETE" });
+                        // 삭제(숨김) 후 목록을 서버에서 다시 fetch
+                        const res = await fetch(`${API_BASE_URL}/api/character?userId=${userId}`);
+                        const data = await res.json();
+                        if (data.ok) setCharacters(data.characters);
+                      }
+                    }}
+                  >삭제</button>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
       <BottomNav />
       
       {/* 유저 프로필 수정 모달 */}
@@ -521,10 +581,10 @@ export default function MyPage() {
                   setShowLogoutConfirm(false);
                   localStorage.clear();
                   sessionStorage.clear();
-                  await signOut(auth);
-                  navigate('/login');
+                  await signOutUser();
+                  // 로그아웃 후 게스트 모드로 전환되고 홈으로 이동되므로 navigate 제거
                 }}
-                style={{ flex: 1, background: '#ff4d32', color: '#fff', border: 'none', borderRadius: 10, padding: '14px 0', fontWeight: 700, fontSize: 16, cursor: 'pointer' }}
+                style={{ flex: 1, background: '#ff4081', color: '#fff', border: 'none', borderRadius: 10, padding: '14px 0', fontWeight: 700, fontSize: 16, cursor: 'pointer' }}
               >로그아웃</button>
             </div>
           </div>
@@ -580,7 +640,7 @@ export default function MyPage() {
           isOpen={showCharacterEditModal}
           onClose={() => { setShowCharacterEditModal(false); setSelectedCharacter(null); }}
           characterData={selectedCharacter}
-          onSave={async (updated) => {
+          onSave={async (updated: Character) => {
             try {
               const response = await fetch(`${API_BASE_URL}/api/character/${updated.id}`, {
                 method: 'PUT',
@@ -604,10 +664,12 @@ export default function MyPage() {
               const data = await res.json();
               if (data.ok) setCharacters(data.characters);
             } catch (error: any) {
-              alert(error.message || '저장 중 오류가 발생했습니다.');
+              setAlertTitle('오류');
+              setAlertMsg(error.message || '저장 중 오류가 발생했습니다.');
+              setAlertOpen(true);
             }
           }}
-      />
+        />
       )}
 
       {/* 유저 프로필 상세 모달 */}
@@ -616,8 +678,11 @@ export default function MyPage() {
           isOpen={showProfileDetailModal}
           onClose={() => setShowProfileDetailModal(false)}
           profile={selectedProfile}
+          isMe={true}
         />
       )}
+
+      <CustomAlert open={alertOpen} title={alertTitle} message={alertMsg} onConfirm={() => setAlertOpen(false)} />
     </div>
   );
-} 
+}

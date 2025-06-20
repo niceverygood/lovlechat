@@ -105,7 +105,25 @@ export default function CharacterDetailPage() {
   return (
     <div style={{ background: "#111", minHeight: "100vh", paddingBottom: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
       {/* 상단 3:4 비율 배경 이미지 */}
-      <div style={{ position: "relative", width: "100%", maxWidth: 430, aspectRatio: "3/4", background: `url(${character.profileImg || "/avatars/default-profile.png"}) center/cover no-repeat`, overflow: "hidden", borderRadius: 18, margin: '0 auto', marginBottom: 24 }}>
+      <div style={{ 
+        position: "relative", 
+        width: "100%", 
+        maxWidth: 430, 
+        aspectRatio: "3/4", 
+        background: `url(${(() => {
+          const bg = character.backgroundImg;
+          const profile = character.profileImg;
+          // backgroundImg가 null, undefined, 빈 문자열이면 profileImg 사용
+          if (!bg || bg.trim() === '') {
+            return profile || "/imgdefault.jpg";
+          }
+          return bg;
+        })()}) center/cover no-repeat`, 
+        overflow: "hidden", 
+        borderRadius: 18, 
+        margin: '0 auto', 
+        marginBottom: 24 
+      }}>
         <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg,rgba(0,0,0,0.38) 60%,rgba(0,0,0,0.85) 100%)" }} />
         <button onClick={() => navigate(-1)} style={{ position: 'absolute', left: 16, top: 16, background: 'none', border: 'none', color: '#fff', fontSize: 28, zIndex: 2 }}>&larr;</button>
         {/* 프로필/이름/나이/직업 오버레이 */}
@@ -133,30 +151,53 @@ export default function CharacterDetailPage() {
           {character.firstMessage || <span style={{ color: '#bbb', fontWeight: 400, fontSize: 18 }}>등록된 첫대사가 없습니다.</span>}
         </div>
       </div>
+
       {/* 하단 고정 채팅하기 버튼 */}
-      <button 
-        onClick={handleChatClick}
-        style={{
-          position: "fixed", 
-          left: '50%',
-          transform: 'translateX(-50%)',
-          bottom: 0, 
-          height: 60, 
-          width: '100%',
-          maxWidth: 430,
-          background: "#ff4081", 
-          color: "#fff", 
-          fontWeight: 700, 
-          fontSize: 22, 
-          border: "none", 
-          borderRadius: '18px',
-          cursor: "pointer",
-          boxShadow: "0 -2px 12px rgba(0,0,0,0.13)",
-          zIndex: 100
-        }}
-      >
-        채팅하기
-      </button>
+      <div style={{
+        position: 'fixed',
+        left: 0,
+        right: 0,
+        bottom: 0,
+        background: '#111',
+        padding: '16px 0 20px 0',
+        borderTop: '1px solid #333',
+        zIndex: 100
+      }}>
+        <button
+          onClick={handleChatClick}
+          style={{
+            width: '92%',
+            maxWidth: 430,
+            margin: '0 auto',
+            display: 'block',
+            background: 'linear-gradient(135deg, #ff4081, #ff6ec7)',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 16,
+            padding: '18px 0',
+            fontWeight: 700,
+            fontSize: 18,
+            cursor: 'pointer',
+            boxShadow: '0 4px 16px rgba(255, 64, 129, 0.4)',
+            transition: 'transform 0.15s, box-shadow 0.15s',
+          }}
+          onMouseDown={e => {
+            e.currentTarget.style.transform = 'scale(0.98)';
+            e.currentTarget.style.boxShadow = '0 2px 8px rgba(255, 64, 129, 0.6)';
+          }}
+          onMouseUp={e => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.boxShadow = '0 4px 16px rgba(255, 64, 129, 0.4)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'scale(1)';
+            e.currentTarget.style.boxShadow = '0 4px 16px rgba(255, 64, 129, 0.4)';
+          }}
+        >
+          💬 {character.name}와 채팅하기
+        </button>
+      </div>
+
       {/* 페르소나 선택 모달 */}
       {showPersonaModal && (
         <div style={{

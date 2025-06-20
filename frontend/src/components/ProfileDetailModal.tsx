@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
 
 interface ProfileDetailModalProps {
   isOpen: boolean;
@@ -14,61 +14,12 @@ interface ProfileDetailModalProps {
     habit?: string;
   };
   editMode?: boolean;
-  onSave?: () => void; // 저장 후 목록 갱신용 콜백
-  followerCount?: number;
-  followingCount?: number;
-  characters?: Array<{ id: number; profileImg: string; name: string; age?: string; job?: string; }>;
+  onSave?: () => void;
   isMe?: boolean;
 }
 
-export default function ProfileDetailModal({ isOpen, onClose, profile, editMode = false, onSave, followerCount = 0, followingCount = 0, characters = [], isMe = false }: ProfileDetailModalProps) {
-  const [isEdit, setIsEdit] = useState(editMode);
-  const [name, setName] = useState(profile.name || "");
-  const [avatar, setAvatar] = useState(profile.avatar || "/imgdefault.jpg");
-  const [gender, setGender] = useState(profile.gender || "밝히지 않음");
-  const [age, setAge] = useState(profile.age || "");
-  const [job, setJob] = useState(profile.job || "");
-  const [info, setInfo] = useState(profile.info || "");
-  const [habit, setHabit] = useState(profile.habit || "");
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    setName(profile.name || "");
-    setAvatar(profile.avatar || "/imgdefault.jpg");
-    setGender(profile.gender || "밝히지 않음");
-    setAge(profile.age || "");
-    setJob(profile.job || "");
-    setInfo(profile.info || "");
-    setHabit(profile.habit || "");
-    setIsEdit(editMode);
-  }, [profile, editMode]);
-
+export default function ProfileDetailModal({ isOpen, onClose, profile, isMe = false }: ProfileDetailModalProps) {
   if (!isOpen) return null;
-
-  const handleSave = async () => {
-    const payload = { 
-      name, 
-      avatar, 
-      gender, 
-      age: age && !isNaN(Number(age)) ? Number(age) : null, 
-      job, 
-      info, 
-      habit 
-    };
-    const res = await fetch(`/api/persona/${profile.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (data.ok) {
-      setIsEdit(false);
-      if (onSave) onSave();
-      onClose();
-    } else {
-      alert("수정 실패: " + data.error);
-    }
-  };
 
   return (
     <div style={{
@@ -77,21 +28,22 @@ export default function ProfileDetailModal({ isOpen, onClose, profile, editMode 
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       zIndex: 1000
     }}>
       <div style={{
-        backgroundColor: 'white',
-        borderRadius: 20,
+        backgroundColor: '#1e1e1e',
+        borderRadius: 16,
         padding: 24,
         width: '100%',
-        maxWidth: 430,
+        maxWidth: 350,
         position: 'relative',
-        minHeight: 520
+        border: '1px solid #333'
       }}>
+        {/* 닫기 버튼 */}
         <button
           onClick={onClose}
           style={{
@@ -102,51 +54,95 @@ export default function ProfileDetailModal({ isOpen, onClose, profile, editMode 
             border: 'none',
             fontSize: 24,
             cursor: 'pointer',
-            color: '#666'
+            color: '#888',
+            width: 24,
+            height: 24,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
           }}
         >
           ×
         </button>
-        {/* 프로필 헤더 */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+
+        {/* 프로필 이미지 */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          marginBottom: 16 
+        }}>
           <img
-              src={profile.avatar || "/imgdefault.jpg"}
+            src={profile.avatar || "/imgdefault.jpg"}
             alt={profile.name}
-              style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid #eee' }}
-              onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = '/imgdefault.jpg'; }}
+            style={{ 
+              width: 80, 
+              height: 80, 
+              borderRadius: '50%', 
+              objectFit: 'cover', 
+              border: '3px solid #333' 
+            }}
+            onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = '/imgdefault.jpg'; }}
           />
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 22, marginBottom: 2 }}>{profile.name}</div>
-              <div style={{ color: '#888', fontSize: 15 }}>
-                팔로워 <b>{followerCount}</b> &nbsp; 팔로잉 <b>{followingCount}</b>
-              </div>
-            </div>
+        </div>
+
+        {/* 이름 */}
+        <div style={{ 
+          color: '#fff', 
+          fontSize: 22, 
+          fontWeight: 700, 
+          textAlign: 'center',
+          marginBottom: 8
+        }}>
+          {profile.name}
+        </div>
+
+        {/* 기본 정보 (나이, 성별, 직업) */}
+        <div style={{ 
+          color: '#aaa', 
+          fontSize: 16, 
+          textAlign: 'center',
+          marginBottom: 16
+        }}>
+          {[
+            profile.age && `${profile.age}살`,
+            profile.gender,
+            profile.job
+          ].filter(Boolean).join(' · ') || '정보 없음'}
+        </div>
+
+        {/* 추가 정보 */}
+        {profile.info && (
+          <div style={{ 
+            color: '#ccc', 
+            fontSize: 14, 
+            textAlign: 'center',
+            marginBottom: 16,
+            lineHeight: 1.4,
+            padding: '12px 16px',
+            background: 'rgba(255,255,255,0.05)',
+            borderRadius: 12,
+            border: '1px solid rgba(255,255,255,0.1)'
+          }}>
+            {profile.info}
           </div>
-          {/* 내 페이지가 아니면 팔로우 버튼 노출 */}
-          {!isMe && (
-            <button style={{ background: '#ffe3ef', color: '#ff4081', border: 'none', borderRadius: 16, padding: '10px 36px', fontWeight: 700, fontSize: 18, cursor: 'pointer' }}>팔로우</button>
-          )}
-        </div>
-        {/* 자기소개 */}
-        <div style={{ color: '#bbb', fontSize: 16, margin: '12px 0 18px 0' }}>{profile.info || '자기 소개가 없습니다.'}</div>
-        {/* 공개 캐릭터 리스트 */}
-        <div style={{ fontWeight: 700, fontSize: 17, margin: '18px 0 10px 0' }}>공개 캐릭터</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          {characters.length === 0 ? (
-            <div style={{ color: '#bbb', gridColumn: '1/3' }}>아직 만든 캐릭터가 없습니다.</div>
-          ) : (
-            characters.map(char => (
-              <div key={char.id} style={{ background: '#faf9fd', borderRadius: 16, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.04)', marginBottom: 0 }}>
-                <img src={char.profileImg || '/imgdefault.jpg'} alt={char.name} style={{ width: '100%', height: 110, objectFit: 'cover', borderTopLeftRadius: 16, borderTopRightRadius: 16 }} onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = '/imgdefault.jpg'; }} />
-                <div style={{ padding: '12px 14px 14px 14px' }}>
-                  <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 2 }}>{char.name}</div>
-                  <div style={{ color: '#888', fontSize: 14 }}>{char.age ? `${char.age}세` : ''}{char.age && char.job ? ' · ' : ''}{char.job || ''}</div>
-            </div>
-            </div>
-            ))
-          )}
-        </div>
+        )}
+
+        {/* 습관 정보 */}
+        {profile.habit && (
+          <div style={{ 
+            color: '#ddd', 
+            fontSize: 14, 
+            textAlign: 'center',
+            lineHeight: 1.4,
+            padding: '12px 16px',
+            background: 'rgba(108, 92, 231, 0.1)',
+            borderRadius: 12,
+            border: '1px solid rgba(108, 92, 231, 0.3)'
+          }}>
+            <div style={{ color: '#9c88ff', fontWeight: 600, marginBottom: 4 }}>특징</div>
+            {profile.habit}
+          </div>
+        )}
       </div>
     </div>
   );

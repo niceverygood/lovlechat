@@ -4,9 +4,17 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3002",
+    "dev:local": "cp .env.local .env && next dev -p 3002",
+    "dev:cloud": "cp .env.development.cloud .env && next dev -p 3002",
+    "dev:turbo": "next dev --turbo -p 3002",
     "build": "next build",
+    "build:analyze": "ANALYZE=true next build",
     "start": "next start",
-    "lint": "next lint"
+    "start:prod": "NODE_ENV=production next start -p 3002",
+    "lint": "next lint",
+    "lint:fix": "next lint --fix",
+    "clean": "rm -rf .next out",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "cors": "^2.8.5",

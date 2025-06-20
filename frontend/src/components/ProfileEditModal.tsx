@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import CustomAlert from './CustomAlert';
 
 interface ProfileEditModalProps {
   isOpen: boolean;
@@ -34,6 +35,10 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
     avatar: ''
   });
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertMsg, setAlertMsg] = useState('');
+  const [alertTitle, setAlertTitle] = useState('');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -73,10 +78,13 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
     e.preventDefault();
     
     if (!formData.name.trim()) {
-      alert('이름은 필수 입력 항목입니다.');
+      setAlertTitle('입력 오류');
+      setAlertMsg('이름은 필수 입력 항목입니다.');
+      setAlertOpen(true);
       return;
     }
 
+    setLoading(true);
     try {
       const updatedProfile = {
         ...profileData,
@@ -93,7 +101,11 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
       onClose();
     } catch (error) {
       console.error('프로필 수정 중 오류:', error);
-      alert('프로필 수정 중 오류가 발생했습니다.');
+      setAlertTitle('오류');
+      setAlertMsg('프로필 수정 중 오류가 발생했습니다.');
+      setAlertOpen(true);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -118,7 +130,9 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
         width: '90%',
         maxWidth: 500,
         maxHeight: '90vh',
-        overflowY: 'auto'
+        overflowY: 'auto',
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
       }} onClick={(e) => e.stopPropagation()}>
         <div style={{
           display: 'flex',
@@ -190,7 +204,7 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
               />
             </div>
 
-            <div style={{ width: '100%', maxWidth: 340, marginBottom: 20 }}>
+            <div style={{ width: '100%', maxWidth: 400, marginBottom: 20 }}>
               <label htmlFor="name" style={{ display: 'block', marginBottom: 8, fontWeight: 500, color: '#fff', fontSize: 14 }}>이름 *</label>
               <input
                 type="text"
@@ -213,7 +227,7 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
               />
             </div>
 
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ width: '100%', maxWidth: 400, marginBottom: 20 }}>
               <label htmlFor="gender" style={{ display: 'block', marginBottom: 8, fontWeight: 500, color: '#fff', fontSize: 14 }}>성별</label>
               <select
                 id="gender"
@@ -238,7 +252,7 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
               </select>
             </div>
 
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ width: '100%', maxWidth: 400, marginBottom: 20 }}>
               <label htmlFor="age" style={{ display: 'block', marginBottom: 8, fontWeight: 500, color: '#fff', fontSize: 14 }}>나이</label>
               <input
                 type="number"
@@ -246,7 +260,7 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
                 name="age"
                 value={formData.age}
                 onChange={handleInputChange}
-                placeholder="나이를 입력하세요"
+                placeholder="숫자만 입력해 주세요"
                 min="1"
                 max="100"
                 style={{
@@ -262,7 +276,7 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
               />
             </div>
 
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ width: '100%', maxWidth: 400, marginBottom: 20 }}>
               <label htmlFor="job" style={{ display: 'block', marginBottom: 8, fontWeight: 500, color: '#fff', fontSize: 14 }}>직업</label>
               <input
                 type="text"
@@ -284,7 +298,7 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
               />
             </div>
 
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ width: '100%', maxWidth: 400, marginBottom: 20 }}>
               <label htmlFor="info" style={{ display: 'block', marginBottom: 8, fontWeight: 500, color: '#fff', fontSize: 14 }}>기본 정보</label>
               <textarea
                 id="info"
@@ -308,7 +322,7 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
               />
             </div>
 
-            <div style={{ marginBottom: 20 }}>
+            <div style={{ width: '100%', maxWidth: 400, marginBottom: 20 }}>
               <label htmlFor="habit" style={{ display: 'block', marginBottom: 8, fontWeight: 500, color: '#fff', fontSize: 14 }}>습관적인 말과 행동</label>
               <textarea
                 id="habit"
@@ -334,43 +348,81 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
 
             <div style={{
               display: 'flex',
+              flexDirection: 'row',
               gap: 12,
               marginTop: 32,
               paddingTop: 20,
-              borderTop: '1px solid #333'
+              borderTop: '1px solid #333',
+              width: '100%',
             }}>
               <button type="button" onClick={onClose} style={{
                 flex: 1,
-                padding: '12px 24px',
+                padding: '14px 0',
                 borderRadius: 8,
                 fontSize: 16,
                 fontWeight: 500,
                 cursor: 'pointer',
                 border: '1px solid #444',
                 background: '#333',
-                color: '#fff'
+                color: '#fff',
+                minWidth: 0
               }}>
                 취소
               </button>
-              <button type="submit" style={{
-                width: '100%',
-                maxWidth: 340,
-                padding: '16px 0',
+              <button type="submit" disabled={loading} style={{
+                flex: 1,
+                padding: '14px 0',
                 borderRadius: 8,
                 fontSize: 18,
                 fontWeight: 700,
-                cursor: 'pointer',
+                cursor: loading ? 'not-allowed' : 'pointer',
                 border: 'none',
-                background: '#ff4081',
+                background: loading ? '#ccc' : '#ff4081',
                 color: '#fff',
-                marginTop: 8
+                minWidth: 0,
+                marginTop: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8
               }}>
-                저장
+                {loading && (
+                  <div style={{
+                    width: 18,
+                    height: 18,
+                    border: '2px solid #fff',
+                    borderTop: '2px solid transparent',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite'
+                  }} />
+                )}
+                {loading ? '저장 중...' : '저장'}
               </button>
             </div>
           </div>
         </form>
       </div>
+      <CustomAlert open={alertOpen} title={alertTitle} message={alertMsg} onConfirm={() => setAlertOpen(false)} />
+      <style>{`
+        /* 스크롤바 숨김 */
+        .ProfileEditModal::-webkit-scrollbar {
+          display: none;
+        }
+        /* number input 스피너 숨김 */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        input[type="number"] {
+          -moz-appearance: textfield;
+        }
+        /* 로딩 스피너 애니메이션 */
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 };

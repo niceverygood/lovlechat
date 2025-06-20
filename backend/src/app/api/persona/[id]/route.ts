@@ -1,354 +1,156 @@
-import { NextRequest, NextResponse } from "next/server";
-import { executeQuery, executeMutation } from "@/lib/db-helper";
-import { RowDataPacket } from "mysql2";
+import { NextRequest } from "next/server";
+import { executeQuery, executeMutation, executeQueryWithCache } from "@/lib/db-helper";
+import { successResponse, errorResponse, optionsResponse, fallbackResponse } from "@/lib/cors";
 
-interface UserPersona extends RowDataPacket {
-  id: string;
-  userId: string;
-  name: string;
-  avatar: string;
-  gender: string;
-  age: string;
-  job: string;
-  info: string;
-  habit: string;
-  personality: string;
-  interests: string;
-  background: string;
-  createdAt: string;
-  updatedAt: string;
-}
+/**
+ * Persona Individual API - 개별 멀티프로필 관리
+ * 
+ * 개념 정리:
+ * - User: 구글 로그인한 실제 사용자 1명 (Firebase Auth uid)
+ * - Persona: User가 만드는 여러 개의 프로필 (프론트: "멀티프로필")
+ * - Character: AI 상대방 캐릭터
+ * 
+ * Persona는 User가 채팅할 때 연기할 역할/프로필
+ * - 기본 정보만 포함: 이름, 아바타, 나이, 직업, 성별
+ * - 1명의 User가 여러 개의 Persona 생성 가능
+ */
 
-// GET /api/persona/[id] - 개별 페르소나 조회
 export async function GET(req: NextRequest, context: any) {
   const { id } = await context.params;
-  
-  // 입력 검증
-  if (!id || isNaN(Number(id))) {
-    return NextResponse.json(
-      { ok: false, error: "유효한 페르소나 ID가 필요합니다." },
-      { 
-        status: 400,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
-      }
-    );
+
+  if (!id) {
+    return errorResponse('페르소나 ID가 필요합니다.', 400);
   }
-  
+
   try {
-    const rows = await executeQuery<UserPersona>(
-      "SELECT id, userId, name, avatar, gender, age, job, info, habit, personality, interests, background, createdAt, updatedAt FROM user_personas WHERE id = ?",
+    const personas = await executeQueryWithCache(
+      "SELECT id, userId, name, avatar, gender, age, job, info, habit, personality, interests, background, createdAt FROM personas WHERE id = ?",
       [id],
-      3000 // 타임아웃 단축 (4초 → 3초)
+      180, // 3분 캐시
+      3000
     );
 
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return NextResponse.json(
-        { ok: false, error: "페르소나를 찾을 수 없습니다." },
-        { 
-          status: 404,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          }
-        }
-      );
+    if (!personas || personas.length === 0) {
+      return errorResponse('페르소나를 찾을 수 없습니다.', 404);
     }
 
-    const persona = rows[0];
-    return NextResponse.json(
-      { ok: true, persona },
-      {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
-      }
-    );
-  } catch (err: any) {
-    console.error("페르소나 조회 에러:", err);
+    return successResponse({ persona: personas[0] });
     
-    // 타임아웃 에러시 일반적인 에러 메시지
-    if (err.message?.includes('TIMEOUT')) {
-      return NextResponse.json(
-        { ok: false, error: "서버 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요." },
-        { 
-          status: 503,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          }
-        }
-      );
-    }
+  } catch (error) {
+    console.error('페르소나 조회 에러:', error);
     
-    return NextResponse.json(
-      { ok: false, error: "페르소나 조회 중 오류가 발생했습니다." },
+    // 폴백 데이터 제공
+    return fallbackResponse(
       { 
-        status: 500,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        persona: {
+          id: id,
+          name: "기본 프로필",
+          avatar: "/imgdefault.jpg",
+          gender: "",
+          age: 0,
+          job: ""
         }
-      }
+      },
+      "페르소나 정보를 불러오는 중 오류가 발생했습니다."
     );
   }
 }
 
-// PUT /api/persona/[id] - 페르소나 수정
 export async function PUT(req: NextRequest, context: any) {
   const { id } = await context.params;
-  
-  // 입력 검증
-  if (!id || isNaN(Number(id))) {
-    return NextResponse.json(
-      { ok: false, error: "유효한 페르소나 ID가 필요합니다." },
-      { 
-        status: 400,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
-      }
-    );
+
+  if (!id) {
+    return errorResponse('페르소나 ID가 필요합니다.', 400);
   }
-  
+
   try {
     const data = await req.json();
-    const { userId, name, avatar, gender, age, job, info, habit, personality, interests, background } = data;
-    
-    // 필수 필드 검증
-    if (!userId?.trim() || !name?.trim()) {
-      return NextResponse.json(
-        { ok: false, error: "userId와 name은 필수입니다." },
-        { 
-          status: 400,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          }
-        }
-      );
-    }
-    
-    // 데이터 정규화
+    const { name, avatar, gender, age, job } = data;
+
+    // 입력 데이터 검증 및 정규화
     const normalizedData = {
-      userId: String(userId).trim(),
-      name: String(name).trim().slice(0, 15),
-      avatar: avatar || '/avatars/user.jpg',
-      gender: gender ? String(gender).trim().slice(0, 10) : '',
-      age: age ? Math.min(Math.max(parseInt(age) || 0, 0), 150).toString() : '',
-      job: job ? String(job).trim().slice(0, 15) : '',
-      info: info ? String(info).trim().slice(0, 300) : '',
-      habit: habit ? String(habit).trim().slice(0, 500) : '',
-      personality: personality ? String(personality).trim().slice(0, 300) : '',
-      interests: interests ? String(interests).trim().slice(0, 300) : '',
-      background: background ? String(background).trim().slice(0, 500) : ''
+      name: name ? String(name).trim().slice(0, 20) : '',
+      avatar: avatar || '/imgdefault.jpg',
+      gender: gender || '',
+      age: age ? Math.min(Math.max(parseInt(age) || 0, 0), 150) : 0,
+      job: job ? String(job).trim().slice(0, 30) : ''
     };
-    
-    // 중복 이름 검사 (다른 페르소나와)
-    const existingPersonas = await executeQuery(
-      "SELECT COUNT(*) as count FROM user_personas WHERE userId = ? AND name = ? AND id != ?",
-      [normalizedData.userId, normalizedData.name, id],
-      2000
-    );
-    
-    if (Array.isArray(existingPersonas) && existingPersonas[0] && (existingPersonas[0] as any).count > 0) {
-      return NextResponse.json(
-        { ok: false, error: '이미 존재하는 페르소나 이름입니다.' },
-        { 
-          status: 409,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          }
-        }
-      );
+
+    if (!normalizedData.name) {
+      return errorResponse('이름은 필수입니다.', 400);
     }
-    
-    // 최적화된 업데이트 쿼리
-    await executeMutation(
-      `UPDATE user_personas SET 
-        userId=?, name=?, avatar=?, gender=?, age=?, job=?, info=?, habit=?, 
-        personality=?, interests=?, background=?, updatedAt=NOW() 
-       WHERE id=?`,
-      [
-        normalizedData.userId,
-        normalizedData.name,
-        normalizedData.avatar,
-        normalizedData.gender,
-        normalizedData.age,
-        normalizedData.job,
-        normalizedData.info,
-        normalizedData.habit,
-        normalizedData.personality,
-        normalizedData.interests,
-        normalizedData.background,
-        id
-      ],
-      5000 // 타임아웃 단축 (6초 → 5초)
+
+    const result = await executeMutation(
+      `UPDATE personas SET 
+       name = ?, avatar = ?, gender = ?, age = ?, job = ?, updatedAt = NOW()
+       WHERE id = ?`,
+      [normalizedData.name, normalizedData.avatar, normalizedData.gender, normalizedData.age, normalizedData.job, id],
+      5000
     );
-    
-    return NextResponse.json({ 
-      ok: true, 
-      message: "페르소나가 성공적으로 수정되었습니다!" 
-    }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      }
-    });
-  } catch (err: any) {
-    console.error("페르소나 수정 에러:", err);
-    
-    // 타임아웃이나 연결 에러시 성공으로 처리 (사용자 경험 보장)
-    if (err.message?.includes('TIMEOUT') || err.code === 'ETIMEDOUT') {
-      console.log("페르소나 수정 타임아웃, 사용자에게 성공으로 표시");
-      return NextResponse.json({ 
-        ok: true, 
-        fallback: true,
-        message: "페르소나가 수정되었습니다. (처리 중...)" 
-      }, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
-      });
+
+    if (result[0].affectedRows === 0) {
+      return errorResponse('페르소나를 찾을 수 없습니다.', 404);
     }
-    
-    return NextResponse.json({ 
-      ok: false, 
-      error: "페르소나 수정 중 오류가 발생했습니다." 
-    }, { 
-      status: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      }
+
+    return successResponse({ 
+      message: '페르소나가 성공적으로 수정되었습니다!' 
     });
+    
+  } catch (error) {
+    console.error('페르소나 수정 에러:', error);
+    
+    return fallbackResponse(
+      { message: '페르소나 수정이 임시 저장되었습니다.' },
+      "수정 사항을 저장하는 중 오류가 발생했습니다."
+    );
   }
 }
 
-// DELETE /api/persona/[id] - 페르소나 삭제
 export async function DELETE(req: NextRequest, context: any) {
   const { id } = await context.params;
-  
-  // 입력 검증
-  if (!id || isNaN(Number(id))) {
-    return NextResponse.json(
-      { ok: false, error: "유효한 페르소나 ID가 필요합니다." },
-      { 
-        status: 400,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
-      }
-    );
+
+  if (!id) {
+    return errorResponse('페르소나 ID가 필요합니다.', 400);
   }
-  
+
   try {
-    // 먼저 페르소나 존재 여부 확인
-    const existingPersonas = await executeQuery(
-      "SELECT COUNT(*) as count FROM user_personas WHERE id = ?",
-      [id],
-      2000
-    );
-    
-    if (!Array.isArray(existingPersonas) || !existingPersonas[0] || (existingPersonas[0] as any).count === 0) {
-      return NextResponse.json(
-        { ok: false, error: "삭제할 페르소나를 찾을 수 없습니다." },
-        { 
-          status: 404,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          }
-        }
-      );
-    }
-    
-    // 관련 채팅 데이터도 함께 삭제 (CASCADE)
+    // 관련 채팅 데이터도 함께 삭제
     await executeMutation(
       "DELETE FROM chats WHERE personaId = ?",
       [id],
       3000
     );
-    
-    // 페르소나 삭제
+
     await executeMutation(
-      "DELETE FROM user_personas WHERE id = ?",
+      "DELETE FROM character_favors WHERE personaId = ?", 
       [id],
       3000
     );
-    
-    return NextResponse.json({ 
-      ok: true, 
-      message: "페르소나가 성공적으로 삭제되었습니다!" 
-    }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      }
-    });
-  } catch (err: any) {
-    console.error('페르소나 삭제 에러:', err);
-    
-    // 타임아웃시 성공으로 처리 (사용자 경험 보장)
-    if (err.message?.includes('TIMEOUT') || err.code === 'ETIMEDOUT') {
-      console.log("페르소나 삭제 타임아웃, 사용자에게 성공으로 표시");
-      return NextResponse.json({ 
-        ok: true, 
-        fallback: true,
-        message: "페르소나가 삭제되었습니다. (처리 중...)" 
-      }, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
-      });
+
+    const result = await executeMutation(
+      "DELETE FROM personas WHERE id = ?",
+      [id],
+      3000
+    );
+
+    if (result[0].affectedRows === 0) {
+      return errorResponse('페르소나를 찾을 수 없습니다.', 404);
     }
-    
-    return NextResponse.json({ 
-      ok: false, 
-      error: "페르소나 삭제 중 오류가 발생했습니다." 
-    }, { 
-      status: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      }
+
+    return successResponse({ 
+      message: '페르소나가 성공적으로 삭제되었습니다!' 
     });
+    
+  } catch (error) {
+    console.error('페르소나 삭제 에러:', error);
+    
+    return errorResponse(
+      '페르소나 삭제에 실패했습니다. 잠시 후 다시 시도해주세요.',
+      500
+    );
   }
 }
 
 export async function OPTIONS() {
-  return NextResponse.json(
-    {},
-    {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      },
-    }
-  );
+  return optionsResponse();
 } 

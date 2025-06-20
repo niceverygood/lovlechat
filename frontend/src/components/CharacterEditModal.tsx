@@ -1,39 +1,69 @@
 import React, { useState, useRef, useEffect } from "react";
 import DefaultProfileImage from "./DefaultProfileImage";
+import CustomAlert from './CustomAlert';
+
+interface CharacterData {
+  id: number;
+  gender?: string;
+  scope?: string;
+  category?: string;
+  selectedTags?: string[];
+  profileImg?: string | null;
+  name?: string;
+  age?: string | number;
+  job?: string;
+  oneLiner?: string;
+  background?: string;
+  personality?: string;
+  habit?: string;
+  like?: string;
+  dislike?: string;
+  extraInfos?: string[];
+  firstScene?: string;
+  firstMessage?: string;
+  backgroundImg?: string | null;
+  tags?: string[] | string;
+}
 
 const hashtags = [
   "#소유욕", "#츤데레", "#능글남", "#집착남", "#연상남", "#질투", "#까칠남", "#다정남주", "#무심남", "#대형견남", "#잘생김", "#순정남", "#계략남", "#첫사랑", "#야한", "#상처남", "#직진남", "#집착", "#다정", "#갑을관계", "#연하남", "#인외", "#금지된사랑", "#무뚝뚝", "#소꿉친구", "#존댓말남", "#귀여움", "#다정남", "#순애", "#재벌남", "#힐링", "#싸가지", "#능글", "#로맨스코미디", "#남자", "#혐관", "#로맨스", "#까칠", "#연상", "#자캐", "#강수위", "#신분차이", "#존잘", "#미남", "#초월적존재", "#미친놈", "#학원물", "#반말", "#운명적사랑", "#햇살캐", "#여자", "#오만남", "#피폐", "#판타지", "#독점욕", "#너드", "#욕망", "#아저씨"
 ];
+
 const categories = [
   "애니메이션 & 만화 주인공", "게임 캐릭터", "순수창작 캐릭터", "셀러브리티", "영화 & 드라마 주인공", "버튜버", "기타"
 ];
 
-export default function CharacterEditModal({ isOpen, onClose, characterData, onSave }: {
+interface CharacterEditModalProps {
   isOpen: boolean;
   onClose: () => void;
-  characterData: any;
-  onSave: (updated: any) => void;
-}) {
-  const [gender, setGender] = useState("설정하지 않음");
-  const [scope, setScope] = useState("비공개");
-  const [category, setCategory] = useState("");
+  characterData: CharacterData;
+  onSave: (updated: CharacterData) => void;
+}
+
+export default function CharacterEditModal({ isOpen, onClose, characterData, onSave }: CharacterEditModalProps) {
+  const [gender, setGender] = useState<string>("설정하지 않음");
+  const [scope, setScope] = useState<string>("비공개");
+  const [category, setCategory] = useState<string>("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [profileImg, setProfileImg] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [extraInfos, setExtraInfos] = useState<string[]>([]);
-  const [name, setName] = useState("");
-  const [age, setAge] = useState("");
-  const [job, setJob] = useState("");
-  const [oneLiner, setOneLiner] = useState("");
-  const [background, setBackground] = useState("");
-  const [personality, setPersonality] = useState("");
-  const [habit, setHabit] = useState("");
-  const [like, setLike] = useState("");
-  const [dislike, setDislike] = useState("");
-  const [firstScene, setFirstScene] = useState("");
-  const [firstMessage, setFirstMessage] = useState("");
+  const [name, setName] = useState<string>("");
+  const [age, setAge] = useState<string>("");
+  const [job, setJob] = useState<string>("");
+  const [oneLiner, setOneLiner] = useState<string>("");
+  const [background, setBackground] = useState<string>("");
+  const [personality, setPersonality] = useState<string>("");
+  const [habit, setHabit] = useState<string>("");
+  const [like, setLike] = useState<string>("");
+  const [dislike, setDislike] = useState<string>("");
+  const [firstScene, setFirstScene] = useState<string>("");
+  const [firstMessage, setFirstMessage] = useState<string>("");
   const [backgroundImg, setBackgroundImg] = useState<string | null>(null);
   const backgroundImgInputRef = useRef<HTMLInputElement>(null);
+  const [alertOpen, setAlertOpen] = useState<boolean>(false);
+  const [alertMsg, setAlertMsg] = useState<string>("");
+  const [alertTitle, setAlertTitle] = useState<string>("");
 
   useEffect(() => {
     if (isOpen && characterData) {
@@ -104,11 +134,15 @@ export default function CharacterEditModal({ isOpen, onClose, characterData, onS
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstScene.trim()) {
-      alert("첫 상황을 입력해주세요.");
+      setAlertTitle('입력 오류');
+      setAlertMsg('첫 상황을 입력해주세요.');
+      setAlertOpen(true);
       return;
     }
     if (!firstMessage.trim()) {
-      alert("채팅 첫 마디를 입력해주세요.");
+      setAlertTitle('입력 오류');
+      setAlertMsg('채팅 첫 마디를 입력해주세요.');
+      setAlertOpen(true);
       return;
     }
     const updated = {
@@ -140,9 +174,34 @@ export default function CharacterEditModal({ isOpen, onClose, characterData, onS
 
   return (
     <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflowY: 'auto'
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.7)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', overflowY: 'auto', scrollbarWidth: 'none', msOverflowStyle: 'none'
     }}>
-      <div style={{ background: 'var(--color-bg)', borderRadius: 24, width: '100%', maxWidth: 480, maxHeight: '95vh', overflowY: 'auto', boxShadow: '0 4px 32px rgba(0,0,0,0.25)', margin: 16 }}>
+      <style>{`div::-webkit-scrollbar { display: none !important; }`}</style>
+      <div style={{ background: 'var(--color-bg)', borderRadius: 24, width: '100%', maxWidth: 480, maxHeight: '95vh', overflowY: 'auto', boxShadow: '0 4px 32px rgba(0,0,0,0.25)', margin: 16, scrollbarWidth: 'none', msOverflowStyle: 'none', position: 'relative' }}>
+        {/* X 버튼 */}
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute',
+            top: 18,
+            right: 18,
+            background: 'none',
+            border: 'none',
+            color: '#fff',
+            fontSize: 28,
+            fontWeight: 700,
+            cursor: 'pointer',
+            zIndex: 10,
+            padding: 4,
+            borderRadius: '50%',
+            transition: 'background 0.15s',
+            lineHeight: 1,
+          }}
+          aria-label="닫기"
+          tabIndex={0}
+          onMouseOver={e => e.currentTarget.style.background = '#222'}
+          onMouseOut={e => e.currentTarget.style.background = 'none'}
+        >×</button>
         <div style={{ padding: '24px 20px 0 20px', fontWeight: 700, fontSize: 24 }}>캐릭터 수정하기</div>
         {/* 프로필 사진 업로드 */}
         <div style={{ display: "flex", justifyContent: "center", marginTop: 24, marginBottom: 8 }}>
@@ -190,19 +249,18 @@ export default function CharacterEditModal({ isOpen, onClose, characterData, onS
           </div>
         </div>
         {/* 기본 설정 */}
-        <form onSubmit={handleSubmit}>
-          <div style={{ background: "var(--color-card)", borderRadius: 20, margin: 20, padding: 20 }}>
+        <form onSubmit={handleSubmit} style={{ maxWidth: 400, width: '100%', margin: '0 auto', padding: '0 12px', boxSizing: 'border-box' }}>
+          <div style={{ background: "var(--color-card)", borderRadius: 20, margin: '20px 0', padding: 20, width: '100%', boxSizing: 'border-box' }}>
             <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 12 }}>캐릭터 기본 설정</div>
-            <input placeholder="이름" value={name} onChange={e => setName(e.target.value)} style={{ width: "100%", borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 12, background: "var(--color-card)", color: "var(--color-text)" }} maxLength={15} />
-            <input type="number" placeholder="나이" value={age} onChange={e => setAge(e.target.value)} style={{ width: "100%", borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 12, background: "var(--color-card)", color: "var(--color-text)" }} min="0" max="150" />
-            <input placeholder="직업" value={job} onChange={e => setJob(e.target.value)} style={{ width: "100%", borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 12, background: "var(--color-card)", color: "var(--color-text)" }} maxLength={15} />
-            <input placeholder="캐릭터 한 마디" value={oneLiner} onChange={e => setOneLiner(e.target.value)} style={{ width: "100%", borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 12, background: "var(--color-card)", color: "var(--color-text)" }} maxLength={80} />
-            <textarea placeholder="배경, 가족, MBTI, 키 등을 입력해주세요" value={background} onChange={e => setBackground(e.target.value)} style={{ width: "100%", borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 16, resize: "none", background: "var(--color-card)", color: "var(--color-text)" }} rows={3} maxLength={700} />
-            <textarea placeholder="성격을 입력해주세요" value={personality} onChange={e => setPersonality(e.target.value)} style={{ width: "100%", borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 16, resize: "none", background: "var(--color-card)", color: "var(--color-text)" }} rows={3} maxLength={700} />
-            <textarea placeholder="습관적인 말과 행동 (예시를 입력해주세요)" value={habit} onChange={e => setHabit(e.target.value)} style={{ width: "100%", borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 16, resize: "none", background: "var(--color-card)", color: "var(--color-text)" }} rows={3} maxLength={700} />
-            {/* 좋아하는 것, 싫어하는 것 */}
-            <textarea placeholder="좋아하는 것 (선택)" value={like} onChange={e => setLike(e.target.value)} style={{ width: "100%", borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 16, resize: "none", background: "var(--color-card)", color: "var(--color-text)" }} rows={2} maxLength={50} />
-            <textarea placeholder="싫어하는 것 (선택)" value={dislike} onChange={e => setDislike(e.target.value)} style={{ width: "100%", borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 16, resize: "none", background: "var(--color-card)", color: "var(--color-text)" }} rows={2} maxLength={50} />
+            <input placeholder="이름" value={name} onChange={e => setName(e.target.value)} style={{ width: "100%", boxSizing: 'border-box', borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 12, background: "var(--color-card)", color: "var(--color-text)" }} maxLength={15} />
+            <input type="number" placeholder="나이" value={age} onChange={e => setAge(e.target.value)} style={{ width: "100%", boxSizing: 'border-box', borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 12, background: "var(--color-card)", color: "var(--color-text)" }} min="0" max="150" />
+            <input placeholder="직업" value={job} onChange={e => setJob(e.target.value)} style={{ width: "100%", boxSizing: 'border-box', borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 12, background: "var(--color-card)", color: "var(--color-text)" }} maxLength={15} />
+            <input placeholder="캐릭터 한 마디" value={oneLiner} onChange={e => setOneLiner(e.target.value)} style={{ width: "100%", boxSizing: 'border-box', borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 12, background: "var(--color-card)", color: "var(--color-text)" }} maxLength={80} />
+            <textarea placeholder="배경, 가족, MBTI, 키 등을 입력해주세요" value={background} onChange={e => setBackground(e.target.value)} style={{ width: "100%", boxSizing: 'border-box', borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 16, resize: "none", background: "var(--color-card)", color: "var(--color-text)" }} rows={3} maxLength={700} />
+            <textarea placeholder="성격을 입력해주세요" value={personality} onChange={e => setPersonality(e.target.value)} style={{ width: "100%", boxSizing: 'border-box', borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 16, resize: "none", background: "var(--color-card)", color: "var(--color-text)" }} rows={3} maxLength={700} />
+            <textarea placeholder="습관적인 말과 행동 (예시를 입력해주세요)" value={habit} onChange={e => setHabit(e.target.value)} style={{ width: "100%", boxSizing: 'border-box', borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 16, resize: "none", background: "var(--color-card)", color: "var(--color-text)" }} rows={3} maxLength={700} />
+            <textarea placeholder="좋아하는 것 (선택)" value={like} onChange={e => setLike(e.target.value)} style={{ width: "100%", boxSizing: 'border-box', borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 16, resize: "none", background: "var(--color-card)", color: "var(--color-text)" }} rows={2} maxLength={50} />
+            <textarea placeholder="싫어하는 것 (선택)" value={dislike} onChange={e => setDislike(e.target.value)} style={{ width: "100%", boxSizing: 'border-box', borderRadius: 12, border: "1px solid var(--color-border)", padding: 12, fontSize: 15, marginBottom: 16, resize: "none", background: "var(--color-card)", color: "var(--color-text)" }} rows={2} maxLength={50} />
           </div>
           {/* 게시 범위 설정 */}
           <div style={{ background: "var(--color-card)", borderRadius: 20, margin: 20, padding: 20 }}>
@@ -289,8 +347,8 @@ export default function CharacterEditModal({ isOpen, onClose, characterData, onS
             <div style={{ marginBottom: 8, color: '#bbb', fontSize: 14 }}>이미지를 등록하지 않으면 캐릭터 프로필 사진이 배경으로 활용됩니다.</div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <div style={{ position: 'relative', width: 80, height: 140, border: '2px dashed var(--color-point)', borderRadius: 16, background: '#18141a', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={handleBackgroundImgClick}>
-                {backgroundImg ? (
-                  <img src={backgroundImg} alt="배경" style={{ width: 80, height: 140, objectFit: 'cover', borderRadius: 16 }} />
+                {(backgroundImg || profileImg) ? (
+                  <img src={backgroundImg || profileImg || '/imgdefault.jpg'} alt="배경" style={{ width: 80, height: 140, objectFit: 'cover', borderRadius: 16 }} />
                 ) : (
                   <span style={{ color: '#ff4081', fontSize: 32, fontWeight: 700 }}>+</span>
                 )}
@@ -309,6 +367,7 @@ export default function CharacterEditModal({ isOpen, onClose, characterData, onS
           </div>
         </form>
       </div>
+      <CustomAlert open={alertOpen} title={alertTitle} message={alertMsg} onConfirm={() => setAlertOpen(false)} />
     </div>
   );
 } 

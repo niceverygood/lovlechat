@@ -35,12 +35,35 @@ export default function FavorDetailModal({
   const selectedStage = STAGES[selectedStageIdx];
   return (
     <div style={{
-      position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 3000,
-      background: "#fbeaff", display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', minWidth: '100vw'
+      position: "fixed", 
+      top: 0, 
+      left: 0, 
+      width: "100%",
+      height: "100%",
+      zIndex: 3000,
+      background: "#fbeaff", 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center',
+      padding: '16px',
+      boxSizing: 'border-box',
+      overflow: 'auto'
     }}>
       <div style={{
-        background: '#fff', borderRadius: 24, boxShadow: '0 4px 32px rgba(0,0,0,0.10)',
-        width: '100%', maxWidth: 430, minHeight: 540, margin: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 0 32px 0', position: 'relative'
+        background: '#fff', 
+        borderRadius: 24, 
+        boxShadow: '0 4px 32px rgba(0,0,0,0.10)',
+        width: '100%', 
+        maxWidth: 400, 
+        minHeight: 540, 
+        display: 'flex', 
+        flexDirection: 'column', 
+        alignItems: 'center', 
+        justifyContent: 'center', 
+        padding: '32px 20px', 
+        position: 'relative',
+        margin: '0 auto',
+        boxSizing: 'border-box'
     }}>
         <button onClick={onClose} style={{ position: "absolute", left: 24, top: 24, background: "none", border: "none", fontSize: 28, color: "#888", cursor: 'pointer' }}>&larr;</button>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 32, marginTop: 16 }}>
@@ -51,7 +74,7 @@ export default function FavorDetailModal({
         <div style={{ marginTop: 24, fontWeight: 700, fontSize: 18, color: "#444", textAlign: 'center' }}>{days}일 동안 이야기를 쌓아오고 있어요</div>
         <div style={{ marginTop: 8, fontWeight: 700, fontSize: 20, color: "#ff4081", textAlign: 'center' }}>{selectedStage.label}</div>
         {/* 호감도 게이지 */}
-        <div style={{ marginTop: 24, width: 320, background: "#fff", borderRadius: 16, padding: 20, boxShadow: "0 2px 8px #eee", display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <div style={{ marginTop: 24, width: '100%', maxWidth: 320, background: "#fff", borderRadius: 16, padding: 20, boxShadow: "0 2px 8px #eee", display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <div style={{ fontWeight: 700, fontSize: 16, color: "#ff4081", marginBottom: 8, alignSelf: 'flex-start' }}>호감도</div>
           <div style={{ width: "100%", height: 12, background: "#ffe3ef", borderRadius: 8, marginBottom: 8, position: "relative" }}>
             <div style={{
@@ -89,7 +112,7 @@ export default function FavorDetailModal({
           </div>
         </div>
         {/* 단계별 설명 */}
-        <div style={{ marginTop: 40, width: 320, background: "none", textAlign: "center" }}>
+        <div style={{ marginTop: 40, width: '100%', maxWidth: 320, background: "none", textAlign: "center" }}>
           <div style={{ fontWeight: 700, fontSize: 20, marginBottom: 8, color: '#ff4081' }}>{selectedStage.label}</div>
           <div style={{ color: "#444", fontSize: 16, marginBottom: 12 }}>{selectedStage.desc}</div>
           {selectedStage.require > 0 && (

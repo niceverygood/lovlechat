@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { executeQuery, executeMutation } from "@/lib/db-helper";
+import { executeQuery, executeMutation, parseJsonSafely } from "@/lib/db-helper";
 
 interface CharacterProfile {
   id: string;
@@ -15,21 +15,6 @@ interface CharacterProfile {
   updated_at: string;
 }
 
-function parseJsonSafely(jsonString: string | null): any {
-  if (!jsonString) return null;
-  try {
-    // 해시태그 문자열을 JSON 배열로 변환
-    if (jsonString.startsWith('#')) {
-      const tags = jsonString.split(',').map(tag => tag.trim());
-      return tags;
-    }
-    return JSON.parse(jsonString);
-  } catch (e) {
-    console.warn("JSON parse error:", e);
-    return null;
-  }
-}
-
 export async function GET(req: NextRequest, context: any) {
   const { id } = await context.params;
   
@@ -42,8 +27,11 @@ export async function GET(req: NextRequest, context: any) {
     oneLiner: "안녕하세요!",
     background: "기본 배경",
     personality: "친근함",
+    selectedTags: ["친근한", "밝은"],
     profileImg: "/imgdefault.jpg",
-    backgroundImg: "/imgdefault.jpg"
+    backgroundImg: "/imgdefault.jpg",
+    firstScene: "조용한 카페에서 우연히 마주친 두 사람. 따뜻한 햇살이 창문으로 스며들고, 커피 향이 은은하게 퍼져있다.",
+    firstMessage: "안녕하세요! 혹시 여기 자주 오시나요? 처음 보는 얼굴 같은데..."
   };
   
   try {
@@ -71,8 +59,13 @@ export async function GET(req: NextRequest, context: any) {
     const character = rows[0];
     const parsedCharacter = {
       ...character,
-      hashtags: parseJsonSafely((character as any).hashtags),
-      personality: parseJsonSafely((character as any).personality),
+      // 프론트엔드 호환성을 위한 필드명 변환
+      like: (character as any).likes,      // DB likes → 프론트 like
+      dislike: (character as any).dislikes, // DB dislikes → 프론트 dislike
+      tags: parseJsonSafely((character as any).tags),
+      selectedTags: parseJsonSafely((character as any).tags),
+      attachments: parseJsonSafely((character as any).attachments),
+      extraInfos: parseJsonSafely((character as any).extraInfos),
     };
 
     return NextResponse.json(

@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { isGuestMode } from "../utils/guestMode";
+import LoginPromptModal from "./LoginPromptModal";
 
 const navItems = [
   {
@@ -12,7 +14,7 @@ const navItems = [
     ),
   },
   {
-    label: "채팅",
+    label: "추천",
     path: "/for-you",
     icon: (
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 256 256">
@@ -34,6 +36,17 @@ const navItems = [
 export default function BottomNav() {
   const navigate = useNavigate();
   const current = window.location.pathname;
+  const [showLoginModal, setShowLoginModal] = useState(false);
+
+  const handleNavClick = (path: string) => {
+    // 게스트 모드에서 마이페이지 접근 제한
+    if (isGuestMode() && path === '/my') {
+      setShowLoginModal(true);
+      return;
+    }
+    
+    navigate(path);
+  };
   const navStyle: React.CSSProperties = {
     width: '100%',
     maxWidth: 480,
@@ -53,33 +66,40 @@ export default function BottomNav() {
     padding: '8px 0',
   };
   return (
-    <nav style={navStyle}>
-      {navItems.map((item) => {
-        const isActive = current === item.path;
-        return (
-          <div
-            key={item.label}
-            onClick={() => navigate(item.path)}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              color: isActive ? "#FFFFFF" : "#ABABAB",
-              fontWeight: isActive ? 700 : 500,
-              fontSize: 13,
-              cursor: "pointer",
-              flex: 1,
-              gap: 2,
-              padding: "4px 0",
-            }}
-          >
-            <div style={{ display: "flex", height: 32, alignItems: "center", justifyContent: "center" }}>
-              {item.icon}
+    <>
+      <nav style={navStyle}>
+        {navItems.map((item) => {
+          const isActive = current === item.path;
+          return (
+            <div
+              key={item.label}
+              onClick={() => handleNavClick(item.path)}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                color: isActive ? "#FFFFFF" : "#ABABAB",
+                fontWeight: isActive ? 700 : 500,
+                fontSize: 13,
+                cursor: "pointer",
+                flex: 1,
+                gap: 2,
+                padding: "4px 0",
+              }}
+            >
+              <div style={{ display: "flex", height: 32, alignItems: "center", justifyContent: "center" }}>
+                {item.icon}
+              </div>
+              <span>{item.label}</span>
             </div>
-            <span>{item.label}</span>
-          </div>
-        );
-      })}
-    </nav>
+          );
+        })}
+      </nav>
+      <LoginPromptModal 
+        isOpen={showLoginModal} 
+        onClose={() => setShowLoginModal(false)}
+        message="마이페이지는 로그인 후 이용할 수 있습니다."
+      />
+    </>
   );
 } 

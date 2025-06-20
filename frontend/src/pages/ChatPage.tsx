@@ -1,12 +1,19 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useChat } from "../hooks/useChat";
+import { useAuth } from "../hooks/useAuth";
+import { useHearts } from "../hooks/useHearts";
 import MessageBubble from "../components/MessageBubble";
 import ProfileDetailModal from "../components/ProfileDetailModal";
 import FavorDetailModal from "../components/FavorDetailModal";
+import CustomAlert from "../components/CustomAlert";
 import Toast from "../components/Toast";
+import ChatInput from "../components/ChatInput";
+import LoginPromptModal from "../components/LoginPromptModal";
 import { API_BASE_URL } from '../lib/openai';
 import { ChatSkeleton } from "../components/Skeleton";
+import { isGuestMode } from "../utils/guestMode";
+import './ChatPage.css';
 
 interface Character {
   id: number;
@@ -40,11 +47,21 @@ export default function ChatPage() {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const personaId = params.get("persona");
-  const { messages, sendMessage, loading, favor } = useChat(id ?? "", personaId || "");
-  const [input, setInput] = useState("");
+  const { user } = useAuth();
+  const { hearts, loading: heartsLoading, error: heartsError, refreshHearts, useHearts: useHeartsFunction } = useHearts(user?.uid || null);
+  const [persona, setPersona] = useState<{
+    name: string;
+    avatar: string;
+    gender?: string;
+    age?: string;
+    job?: string;
+    info?: string;
+    habit?: string;
+  }>({ name: "나", avatar: "/avatars/default-profile.png" });
+  const [isPersonaLoading, setIsPersonaLoading] = useState(true);
+  const { messages, sendMessage, loading, favor, backgroundImageUrl } = useChat(id ?? "", personaId || "", persona.avatar, user?.uid, useHeartsFunction);
   const [character, setCharacter] = useState<Character | null>(null);
   const [characterLoading, setCharacterLoading] = useState(true);
-  const [persona, setPersona] = useState<{ name: string; avatar: string }>({ name: "나", avatar: "/avatars/default-profile.png" });
   const [days, setDays] = useState(1);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<{
@@ -59,6 +76,7 @@ export default function ChatPage() {
   } | null>(null);
   const [showFavorModal, setShowFavorModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const favorRef = useRef(favor);
   const [showNotice, setShowNotice] = useState(true);
@@ -66,6 +84,8 @@ export default function ChatPage() {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportReason, setReportReason] = useState("");
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [guestMessageCount, setGuestMessageCount] = useState(0);
 
   // 단계별 정보
   const STAGES = [
@@ -92,26 +112,73 @@ export default function ChatPage() {
       .catch(() => setCharacterLoading(false));
   }, [id]);
 
-  // 메시지 영역 스크롤: 최초 진입시에는 바로, 이후에는 부드럽게
+  // 메시지 영역 스크롤: 최초 진입시에는 즉시 최하단으로, 이후에는 부드럽게
   const isFirstScroll = useRef(true);
   useEffect(() => {
-    if (messagesEndRef.current) {
-      if (isFirstScroll.current) {
-        messagesEndRef.current.scrollIntoView({ behavior: "auto" });
-        isFirstScroll.current = false;
-      } else {
-        messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-      }
+    if (isFirstScroll.current && messagesContainerRef.current) {
+      // 첫 진입 시: 애니메이션 없이 즉시 최하단으로 이동
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+      isFirstScroll.current = false;
+    } else if (messagesEndRef.current) {
+      // 이후 메시지들: 부드럽게 스크롤
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
 
   useEffect(() => {
     if (personaId) {
+      // 게스트 모드에서 persona=guest인 경우 특별 처리
+      if (isGuestMode() && personaId === 'guest') {
+        setPersona({ name: "게스트", avatar: "/imgdefault.jpg" });
+        setIsPersonaLoading(false);
+        return;
+      }
+      
+      setIsPersonaLoading(true);
+      console.log('Fetching persona:', personaId);
       fetch(`${API_BASE_URL}/api/persona/${personaId}`)
-        .then(res => res.json())
+        .then(res => {
+          if (!res.ok) {
+            throw new Error(`HTTP error! status: ${res.status}`);
+          }
+          return res.json();
+        })
         .then(data => {
-          if (data.ok) setPersona({ name: data.persona.name, avatar: data.persona.avatar });
+          console.log('Persona data:', data);
+          if (data.ok) {
+            const avatar = data.persona.avatar || "/avatars/default-profile.png";
+            const personaData = {
+              name: data.persona.name,
+              avatar,
+              gender: data.persona.gender,
+              age: data.persona.age?.toString(),
+              job: data.persona.job,
+              info: data.persona.info,
+              habit: data.persona.habit
+            };
+            console.log('Setting persona:', personaData);
+            
+            // 이미지 프리로딩
+            const img = new Image();
+            img.onload = () => {
+              setPersona(personaData);
+              setIsPersonaLoading(false);
+            };
+            img.onerror = () => {
+              console.log('Failed to load persona image, using default');
+              setPersona({ ...personaData, avatar: "/avatars/default-profile.png" });
+              setIsPersonaLoading(false);
+            };
+            img.src = avatar;
+          }
+        })
+        .catch(error => {
+          console.error('Error fetching persona:', error);
+          setPersona({ name: "나", avatar: "/avatars/default-profile.png" });
+          setIsPersonaLoading(false);
         });
+    } else {
+      setIsPersonaLoading(false);
     }
   }, [personaId]);
 
@@ -154,12 +221,25 @@ export default function ChatPage() {
     return () => clearTimeout(timer);
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim()) return;
-    sendMessage(input);
-    setInput("");
-  };
+  // 하트 에러 처리
+  useEffect(() => {
+    if (heartsError) {
+      setToast({
+        message: heartsError,
+        type: "error"
+      });
+    }
+  }, [heartsError]);
+
+  // 게스트 모드에서 메시지 수 추적
+  useEffect(() => {
+    if (isGuestMode() && messages) {
+      const userMessages = messages.filter(msg => msg.sender === 'user');
+      setGuestMessageCount(userMessages.length);
+    }
+  }, [messages]);
+
+
 
   const handleProfileClick = (profile: {
     id: string;
@@ -196,8 +276,53 @@ export default function ChatPage() {
     }
   }, [showProfileModal, character, selectedProfile]);
 
-  if (!personaId) {
-    return <div style={{ padding: 40, textAlign: 'center', color: '#ff4081', fontWeight: 700 }}>멀티프로필을 먼저 선택해주세요.</div>;
+  // 게스트 모드에서 메시지 전송 제한
+  const handleSendMessage = async (message: string) => {
+    if (isGuestMode()) {
+      console.log('게스트 모드 메시지 전송:', { guestMessageCount, message });
+      
+      if (guestMessageCount >= 3) {
+        console.log('게스트 모드 메시지 제한 도달 - 로그인 모달 표시');
+        setShowLoginModal(true);
+        return;
+      }
+    }
+    
+    // 일반 메시지 전송
+    return sendMessage(message);
+  };
+
+  const handleLeaveChat = async () => {
+    try {
+      // 채팅방 DB 삭제
+      const response = await fetch(`${API_BASE_URL}/api/chat`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ personaId, characterId: id })
+      });
+
+      if (!response.ok) {
+        throw new Error('채팅방 나가기에 실패했습니다.');
+      }
+
+      const data = await response.json();
+      if (data.ok) {
+        navigate('/home');
+      } else {
+        throw new Error(data.error || '채팅방 나가기에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('채팅방 나가기 오류:', error);
+      setToast({
+        message: '채팅방 나가기에 실패했습니다. 다시 시도해주세요.',
+        type: 'error'
+      });
+    }
+  };
+
+  // 멀티프로필 이미지가 준비될 때까지 렌더링 보류
+  if (isPersonaLoading) {
+    return <div style={{ padding: 40, textAlign: 'center', color: '#ff4081', fontWeight: 700 }}>멀티프로필 정보를 불러오는 중...</div>;
   }
 
   if (characterLoading || !character) {
@@ -207,9 +332,30 @@ export default function ChatPage() {
   if (!messages || messages.length === 0) {
     // 채팅 내역이 없을 때: 상단 캐릭터 정보/첫 장면/첫 대사만 보여주고, 메시지 영역은 비워둠
     return (
-      <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--color-bg)" }}>
+      <div className="chat-container" style={{ 
+        display: "flex", 
+        flexDirection: "column", 
+        height: "100vh", 
+        background: backgroundImageUrl 
+          ? `linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), url(${backgroundImageUrl})` 
+          : "var(--color-bg)",
+        backgroundSize: backgroundImageUrl ? "cover" : "auto",
+        backgroundPosition: backgroundImageUrl ? "center" : "initial",
+        backgroundRepeat: "no-repeat",
+        transition: "background 1s ease-in-out"
+      }}>
         {/* 헤더 */}
-        <div style={{ background: "var(--color-card)", padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border)", position: "sticky", top: 0, zIndex: 10 }}>
+        <div style={{ 
+          background: "var(--color-card)", 
+          padding: "12px 20px", 
+          display: "flex", 
+          alignItems: "center", 
+          justifyContent: "space-between", 
+          borderBottom: "1px solid var(--color-border)", 
+          position: "sticky", 
+          top: 0, 
+          zIndex: 10 
+        }}>
           <div style={{ display: "flex", alignItems: "center" }}>
             <button onClick={() => navigate('/home')} style={{ background: "none", border: "none", fontSize: 24, marginRight: 12, cursor: "pointer", color: "#fff" }}>&larr;</button>
             <img
@@ -231,30 +377,76 @@ export default function ChatPage() {
               <div style={{ color: "#888", fontSize: 14 }}>{character.age ? `${character.age}살` : "나이 비공개"} · {character.job || "직업 비공개"}</div>
             </div>
           </div>
-          <div style={{ display: "flex", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            {/* 하트 표시 */}
+            <div style={{ 
+              display: "flex", 
+              alignItems: "center", 
+              gap: 4, 
+              background: "rgba(255, 64, 129, 0.1)", 
+              padding: "4px 8px", 
+              borderRadius: 12,
+              border: "1px solid rgba(255, 64, 129, 0.3)"
+            }}>
+              <span style={{ fontSize: 16 }}>💖</span>
+              <span style={{ 
+                fontSize: 14, 
+                fontWeight: 700, 
+                color: "#ff4081",
+                minWidth: "20px" 
+              }}>
+                {heartsLoading ? "..." : hearts}
+              </span>
+            </div>
             <span style={{ fontSize: 20, cursor: "pointer" }} onClick={() => setShowMoreModal(true)}>⋮</span>
           </div>
         </div>
-        {/* 관계 단계(스텝바) 상단 좌측에 작게 표시 + 우측에 호감도 */}
-        <div style={{ background: "var(--color-card)", display: "flex", alignItems: "center", borderBottom: "1.5px solid var(--color-point)", padding: "0 0 0 0", position: "sticky", top: 56, zIndex: 9, minHeight: 36, justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 16 }}>
-            {STAGES.map((s, idx) => (
-              <div key={s.label} style={{ display: 'flex', alignItems: 'center', opacity: idx === stageIdx ? 1 : 0.4, margin: '0 2px' }}>
-                <span style={{ fontSize: 16, marginRight: 2 }}>{s.icon}</span>
-                <span style={{ fontWeight: idx === stageIdx ? 700 : 500, color: idx === stageIdx ? '#ff4081' : '#bbb', fontSize: 14 }}>{s.label}</span>
-                {idx < STAGES.length - 1 && <span style={{ margin: '0 2px', color: '#bbb' }}>/</span>}
-              </div>
-            ))}
-          </div>
-          <button
-            style={{ marginRight: 16, background: 'none', border: 'none', color: '#ff4081', fontWeight: 700, fontSize: 15, cursor: 'pointer', padding: '4px 12px', borderRadius: 8, transition: 'background 0.2s' }}
-            onClick={() => setShowFavorModal(true)}
-          >
-            호감도: <span style={{ color: '#ff4081', fontWeight: 700 }}>{favor}점</span>
-          </button>
-        </div>
+              {/* 관계 단계(스텝바) 상단 좌측에 작게 표시 + 우측에 호감도 (게스트 모드에서는 메시지 카운터) */}
+      <div style={{ background: "var(--color-card)", display: "flex", alignItems: "center", borderBottom: "1.5px solid var(--color-point)", padding: "0 0 0 0", position: "sticky", top: 56, zIndex: 9, minHeight: 36, justifyContent: 'space-between' }}>
+        {isGuestMode() ? (
+          // 게스트 모드: 메시지 카운터 표시
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 16 }}>
+              <span style={{ fontSize: 16 }}>💬</span>
+              <span style={{ fontWeight: 700, color: '#ff4081', fontSize: 16 }}>게스트 체험</span>
+            </div>
+            <div style={{ marginRight: 16, color: '#ff4081', fontWeight: 700, fontSize: 15, padding: '4px 12px', borderRadius: 8, background: 'rgba(255, 64, 129, 0.1)', border: '1px solid rgba(255, 64, 129, 0.3)' }}>
+              메시지: <span style={{ color: guestMessageCount >= 3 ? '#ff6b6b' : '#ff4081', fontWeight: 700 }}>{guestMessageCount}/3</span>
+            </div>
+          </>
+        ) : (
+          // 일반 모드: 기존 관계 단계
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 16 }}>
+              {STAGES.map((s, idx) => (
+                <div key={s.label} style={{ display: 'flex', alignItems: 'center', opacity: idx === stageIdx ? 1 : 0.4, margin: '0 2px' }}>
+                  <span style={{ fontSize: 16, marginRight: 2 }}>{s.icon}</span>
+                  <span style={{ fontWeight: idx === stageIdx ? 700 : 500, color: idx === stageIdx ? '#ff4081' : '#bbb', fontSize: 14 }}>{s.label}</span>
+                  {idx < STAGES.length - 1 && <span style={{ margin: '0 2px', color: '#bbb' }}>/</span>}
+                </div>
+              ))}
+            </div>
+            <button
+              style={{ marginRight: 16, background: 'none', border: 'none', color: '#ff4081', fontWeight: 700, fontSize: 15, cursor: 'pointer', padding: '4px 12px', borderRadius: 8, transition: 'background 0.2s' }}
+              onClick={() => setShowFavorModal(true)}
+            >
+              호감도: <span style={{ color: '#ff4081', fontWeight: 700 }}>{favor}점</span>
+            </button>
+          </>
+        )}
+      </div>
         {/* 스토리/메시지 영역 */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "0 0 16px 0", display: "flex", flexDirection: "column" }}>
+        <div 
+          ref={messagesContainerRef}
+          className="messages-container" 
+          style={{ 
+            flex: 1, 
+            overflowY: "auto",
+            padding: "0 0 16px 0",
+            display: "flex",
+            flexDirection: "column"
+          }}
+        >
           {/* 첫 장면/첫대사 표시 */}
           {character?.firstScene && (
             <div style={{ color: "#b97cae", fontSize: 16, textAlign: "center", margin: "32px 0 8px 0", whiteSpace: "pre-line" }}>
@@ -268,48 +460,48 @@ export default function ChatPage() {
           )}
         </div>
         {/* 입력 영역 */}
-        <form onSubmit={handleSubmit} style={{ background: "var(--color-card)", padding: "12px 16px", borderTop: "1px solid var(--color-border)" }}>
-          <div style={{ display: "flex", gap: 8 }}>
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="메시지를 입력하세요..."
-              style={{
-                flex: 1,
-                padding: "12px 16px",
-                borderRadius: 24,
-                border: "1px solid #eee",
-                fontSize: 16,
-                outline: "none"
-              }}
-            />
-            <button
-              type="submit"
-              disabled={loading || !input.trim()}
-              style={{
-                background: loading || !input.trim() ? "#f5f5f5" : "#ff4081",
-                color: loading || !input.trim() ? "#bbb" : "#fff",
-                border: "none",
-                borderRadius: 24,
-                padding: "0 24px",
-                fontWeight: 700,
-                fontSize: 16,
-                cursor: loading || !input.trim() ? "not-allowed" : "pointer"
-              }}
-            >
-              전송
-            </button>
-          </div>
-        </form>
+        <ChatInput
+          onSendMessage={handleSendMessage}
+          loading={loading}
+        />
+        
+        {/* 게스트 모드 로그인 모달 */}
+        {showLoginModal && (
+          <LoginPromptModal
+            isOpen={showLoginModal}
+            onClose={() => setShowLoginModal(false)}
+            message="더 많은 대화를 나누려면 로그인이 필요해요!"
+          />
+        )}
       </div>
     );
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--color-bg)" }}>
+    <div className="chat-container" style={{ 
+      display: "flex", 
+      flexDirection: "column", 
+      height: "100vh", 
+      background: backgroundImageUrl 
+        ? `linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), url(${backgroundImageUrl})` 
+        : "var(--color-bg)",
+      backgroundSize: backgroundImageUrl ? "cover" : "auto",
+      backgroundPosition: backgroundImageUrl ? "center" : "initial",
+      backgroundRepeat: "no-repeat",
+      transition: "background 1s ease-in-out"
+    }}>
       {/* 헤더 */}
-      <div style={{ background: "var(--color-card)", padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--color-border)", position: "sticky", top: 0, zIndex: 10 }}>
+      <div style={{ 
+        background: "var(--color-card)", 
+        padding: "12px 20px", 
+        display: "flex", 
+        alignItems: "center", 
+        justifyContent: "space-between", 
+        borderBottom: "1px solid var(--color-border)", 
+        position: "sticky", 
+        top: 0, 
+        zIndex: 10 
+      }}>
         <div style={{ display: "flex", alignItems: "center" }}>
           <button onClick={() => navigate('/home')} style={{ background: "none", border: "none", fontSize: 24, marginRight: 12, cursor: "pointer", color: "#fff" }}>&larr;</button>
           <img
@@ -331,31 +523,76 @@ export default function ChatPage() {
             <div style={{ color: "#888", fontSize: 14 }}>{character.age ? `${character.age}살` : "나이 비공개"} · {character.job || "직업 비공개"}</div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 16 }}>
-          {/* <span style={{ fontSize: 20, cursor: "pointer" }}>🔍</span> */}
-          <span style={{ fontSize: 20, cursor: "pointer" }} onClick={() => setShowMoreModal(true)}>⋮</span>
-        </div>
-      </div>
-      {/* 관계 단계(스텝바) 상단 좌측에 작게 표시 + 우측에 호감도 */}
-      <div style={{ background: "var(--color-card)", display: "flex", alignItems: "center", borderBottom: "1.5px solid var(--color-point)", padding: "0 0 0 0", position: "sticky", top: 56, zIndex: 9, minHeight: 36, justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 16 }}>
-          {STAGES.map((s, idx) => (
-            <div key={s.label} style={{ display: 'flex', alignItems: 'center', opacity: idx === stageIdx ? 1 : 0.4, margin: '0 2px' }}>
-              <span style={{ fontSize: 16, marginRight: 2 }}>{s.icon}</span>
-              <span style={{ fontWeight: idx === stageIdx ? 700 : 500, color: idx === stageIdx ? '#ff4081' : '#bbb', fontSize: 14 }}>{s.label}</span>
-              {idx < STAGES.length - 1 && <span style={{ margin: '0 2px', color: '#bbb' }}>/</span>}
+                  <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            {/* 하트 표시 */}
+            <div style={{ 
+              display: "flex", 
+              alignItems: "center", 
+              gap: 4, 
+              background: "rgba(255, 64, 129, 0.1)", 
+              padding: "4px 8px", 
+              borderRadius: 12,
+              border: "1px solid rgba(255, 64, 129, 0.3)"
+            }}>
+              <span style={{ fontSize: 16 }}>💖</span>
+              <span style={{ 
+                fontSize: 14, 
+                fontWeight: 700, 
+                color: "#ff4081",
+                minWidth: "20px" 
+              }}>
+                {heartsLoading ? "..." : hearts}
+              </span>
             </div>
-          ))}
+            <span style={{ fontSize: 20, cursor: "pointer" }} onClick={() => setShowMoreModal(true)}>⋮</span>
+          </div>
         </div>
-        <button
-          style={{ marginRight: 16, background: 'none', border: 'none', color: '#ff4081', fontWeight: 700, fontSize: 15, cursor: 'pointer', padding: '4px 12px', borderRadius: 8, transition: 'background 0.2s' }}
-          onClick={() => setShowFavorModal(true)}
-        >
-          호감도: <span style={{ color: '#ff4081', fontWeight: 700 }}>{favor}점</span>
-        </button>
-      </div>
+              {/* 관계 단계(스텝바) 상단 좌측에 작게 표시 + 우측에 호감도 (게스트 모드에서는 메시지 카운터) */}
+        <div style={{ background: "var(--color-card)", display: "flex", alignItems: "center", borderBottom: "1.5px solid var(--color-point)", padding: "0 0 0 0", position: "sticky", top: 56, zIndex: 9, minHeight: 36, justifyContent: 'space-between' }}>
+          {isGuestMode() ? (
+            // 게스트 모드: 메시지 카운터 표시
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 16 }}>
+                <span style={{ fontSize: 16 }}>💬</span>
+                <span style={{ fontWeight: 700, color: '#ff4081', fontSize: 16 }}>게스트 체험</span>
+              </div>
+              <div style={{ marginRight: 16, color: '#ff4081', fontWeight: 700, fontSize: 15, padding: '4px 12px', borderRadius: 8, background: 'rgba(255, 64, 129, 0.1)', border: '1px solid rgba(255, 64, 129, 0.3)' }}>
+                메시지: <span style={{ color: guestMessageCount >= 3 ? '#ff6b6b' : '#ff4081', fontWeight: 700 }}>{guestMessageCount}/3</span>
+              </div>
+            </>
+          ) : (
+            // 일반 모드: 기존 관계 단계
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 16 }}>
+                {STAGES.map((s, idx) => (
+                  <div key={s.label} style={{ display: 'flex', alignItems: 'center', opacity: idx === stageIdx ? 1 : 0.4, margin: '0 2px' }}>
+                    <span style={{ fontSize: 16, marginRight: 2 }}>{s.icon}</span>
+                    <span style={{ fontWeight: idx === stageIdx ? 700 : 500, color: idx === stageIdx ? '#ff4081' : '#bbb', fontSize: 14 }}>{s.label}</span>
+                    {idx < STAGES.length - 1 && <span style={{ margin: '0 2px', color: '#bbb' }}>/</span>}
+                  </div>
+                ))}
+              </div>
+              <button
+                style={{ marginRight: 16, background: 'none', border: 'none', color: '#ff4081', fontWeight: 700, fontSize: 15, cursor: 'pointer', padding: '4px 12px', borderRadius: 8, transition: 'background 0.2s' }}
+                onClick={() => setShowFavorModal(true)}
+              >
+                호감도: <span style={{ color: '#ff4081', fontWeight: 700 }}>{favor}점</span>
+              </button>
+            </>
+          )}
+        </div>
       {/* 스토리/메시지 영역 */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "0 0 16px 0", display: "flex", flexDirection: "column" }}>
+      <div 
+        ref={messagesContainerRef}
+        className="messages-container" 
+        style={{ 
+          flex: 1, 
+          overflowY: "auto",
+          padding: "0 0 16px 0",
+          display: "flex",
+          flexDirection: "column"
+        }}
+      >
         {/* 첫 장면/첫대사 표시 */}
         {character?.firstScene && (
           <div style={{ color: "#b97cae", fontSize: 16, textAlign: "center", margin: "32px 0 8px 0", whiteSpace: "pre-line" }}>
@@ -365,7 +602,7 @@ export default function ChatPage() {
         {character?.firstMessage && (
           <div style={{ color: "#ff4081", fontSize: 16, textAlign: "center", margin: "8px 0 16px 0", whiteSpace: "pre-line" }}>
             <b>첫 대사</b><br />{character.firstMessage}
-        </div>
+          </div>
         )}
         {/* 메시지 리스트 */}
         {messages.map((msg, idx) => (
@@ -375,7 +612,7 @@ export default function ChatPage() {
                 ...msg,
                 avatar: msg.sender === "ai"
                   ? msg.characterProfileImg || character.profileImg || "/avatars/default-profile.png"
-                  : persona.avatar
+                  : msg.avatar || persona.avatar || "/imgdefault.jpg"
               }}
               onProfileClick={() => {
                 if (msg.sender === "ai") {
@@ -390,9 +627,14 @@ export default function ChatPage() {
                   });
                 } else if (msg.sender === "user") {
                   handleProfileClick({
-                    id: personaId,
+                    id: personaId ?? "",
                     name: persona.name,
-                    avatar: persona.avatar
+                    avatar: persona.avatar ?? "",
+                    gender: persona.gender,
+                    age: persona.age,
+                    job: persona.job,
+                    info: persona.info,
+                    habit: persona.habit
                   });
                 }
               }}
@@ -444,40 +686,19 @@ export default function ChatPage() {
         <div ref={messagesEndRef} />
       </div>
       {/* 입력 영역 */}
-      <form onSubmit={handleSubmit} style={{ background: "var(--color-card)", padding: "12px 16px", borderTop: "1px solid var(--color-border)" }}>
-        <div style={{ display: "flex", gap: 8 }}>
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-            placeholder="메시지를 입력하세요..."
-            style={{
-              flex: 1,
-              padding: "12px 16px",
-              borderRadius: 24,
-              border: "1px solid #eee",
-              fontSize: 16,
-              outline: "none"
-            }}
+      <ChatInput
+        onSendMessage={handleSendMessage}
+        loading={loading}
+      />
+      
+      {/* 게스트 모드 로그인 모달 */}
+      {showLoginModal && (
+        <LoginPromptModal
+          isOpen={showLoginModal}
+          onClose={() => setShowLoginModal(false)}
+          message="더 많은 대화를 나누려면 로그인이 필요해요!"
         />
-        <button
-            type="submit"
-            disabled={loading || !input.trim()}
-            style={{
-              background: loading || !input.trim() ? "#f5f5f5" : "#ff4081",
-              color: loading || !input.trim() ? "#bbb" : "#fff",
-              border: "none",
-              borderRadius: 24,
-              padding: "0 24px",
-              fontWeight: 700,
-              fontSize: 16,
-              cursor: loading || !input.trim() ? "not-allowed" : "pointer"
-            }}
-        >
-          전송
-        </button>
-        </div>
-      </form>
+      )}
 
       {/* 프로필 상세 모달 */}
       <ProfileDetailModal
@@ -513,30 +734,16 @@ export default function ChatPage() {
         </div>
       )}
 
-      {/* 채팅 나가기 확인 모달 */}
-      {showLeaveConfirm && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 3002,
-          background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }} onClick={() => setShowLeaveConfirm(false)}>
-          <div style={{ background: '#fff', borderRadius: 18, minWidth: 280, padding: 32, boxShadow: '0 4px 24px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', gap: 24, alignItems: 'center' }} onClick={e => e.stopPropagation()}>
-            <div style={{ color: '#ff4081', fontWeight: 700, fontSize: 17, textAlign: 'center', marginBottom: 8 }}>채팅을 나가면 내용이 영구적으로 삭제 됩니다.<br/>정말 나가시겠습니까?</div>
-            <div style={{ display: 'flex', gap: 16, width: '100%', justifyContent: 'center' }}>
-              <button style={{ flex: 1, background: '#eee', color: '#ff4081', border: 'none', borderRadius: 10, padding: '12px 0', fontWeight: 700, fontSize: 16, cursor: 'pointer' }} onClick={() => setShowLeaveConfirm(false)}>취소</button>
-              <button style={{ flex: 1, background: '#ff4081', color: '#fff', border: 'none', borderRadius: 10, padding: '12px 0', fontWeight: 700, fontSize: 16, cursor: 'pointer' }} onClick={async () => {
-                setShowLeaveConfirm(false);
-                // 채팅방 DB 삭제
-                await fetch(`${API_BASE_URL}/api/chat`, {
-                  method: 'DELETE',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ userId: personaId, characterId: id })
-                });
-                navigate('/');
-              }}>확인</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 채팅 나가기 확인 CustomAlert */}
+      <CustomAlert
+        open={showLeaveConfirm}
+        title="채팅방 나가기"
+        message="채팅을 나가면 내용이 영구적으로 삭제 됩니다.\n정말 나가시겠습니까?"
+        onConfirm={handleLeaveChat}
+        onCancel={() => setShowLeaveConfirm(false)}
+        confirmText="나가기"
+        cancelText="취소"
+      />
 
       {/* 신고하기 모달 */}
       {showReportModal && (

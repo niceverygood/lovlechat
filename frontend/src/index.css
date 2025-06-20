@@ -24,6 +24,12 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar, body::-webkit-scrollbar {
+  display: none;
 }
 
 code {
@@ -58,6 +64,12 @@ code {
   box-shadow: 0 0 32px rgba(0,0,0,0.18);
   border-radius: 0;
   position: relative;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+#root::-webkit-scrollbar {
+  display: none;
 }
 
 @media (max-width: 600px) {
@@ -65,5 +77,91 @@ code {
     max-width: 100vw;
     border-radius: 0;
     box-shadow: none;
+  }
+}
+
+/* 주요 스크롤 컨테이너도 동일하게 적용 */
+.App, .modal, .ProfileEditModal, .CharacterEditModal {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+#root::-webkit-scrollbar, .App::-webkit-scrollbar, .modal::-webkit-scrollbar, .ProfileEditModal::-webkit-scrollbar, .CharacterEditModal::-webkit-scrollbar {
+  display: none;
+}
+
+/* 성능 최적화 CSS */
+
+/* GPU 가속 활성화 */
+.chat-container, .messages-container, .card {
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* 부드러운 스크롤 */
+.messages-container {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 로딩 애니메이션 최적화 */
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+}
+
+.loading-skeleton {
+  animation: pulse 1.5s ease-in-out infinite;
+  background: linear-gradient(90deg, #333 25%, #444 50%, #333 75%);
+  background-size: 200% 100%;
+}
+
+/* 이미지 로딩 최적화 */
+img {
+  image-rendering: optimizeQuality;
+  image-rendering: -webkit-optimize-contrast;
+}
+
+/* 텍스트 렌더링 최적화 */
+* {
+  text-rendering: optimizeSpeed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* 메모리 효율적인 박스 모델 */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* 불필요한 레이아웃 재계산 방지 */
+.fixed-layout {
+  contain: layout style paint;
+}
+
+/* 터치 최적화 */
+button, a, [role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 포커스 최적화 */
+:focus-visible {
+  outline: 2px solid var(--color-point);
+  outline-offset: 2px;
+}
+
+/* 성능 향상을 위한 레이어 분리 */
+.modal, .toast, .floating-button {
+  will-change: transform, opacity;
+  transform: translate3d(0, 0, 0);
+}
+
+/* 애니메이션 성능 최적화 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

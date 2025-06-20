@@ -12,8 +12,8 @@ const getApiBaseUrl = () => {
     return 'https://lovlechat-dq4i.vercel.app';
   }
   
-  // 개발 환경
-  return 'http://localhost:3002';
+  // 개발 환경 - proxy 설정이 있으므로 상대 경로 사용
+  return '';
 };
 
 export const API_BASE_URL = getApiBaseUrl();
@@ -46,36 +46,8 @@ export const corsRequest = async (
   endpoint: string, 
   options: RequestInit = {}
 ): Promise<Response> => {
-  // Mock API for production when backend is not deployed
-  if (API_BASE_URL === '' && process.env.NODE_ENV === 'production') {
-    console.log('🔄 Mock API 사용:', endpoint, options.method);
-    
-    // 페르소나 목록 조회
-    if (endpoint.includes('/api/persona') && (!options.method || options.method === 'GET')) {
-      const urlParams = new URLSearchParams(endpoint.split('?')[1]);
-      const userId = urlParams.get('userId') || 'mock_user';
-      return createMockResponse({ ok: true, personas: getMockPersonas(userId) });
-    }
-    
-    // 페르소나 생성
-    if (endpoint.includes('/api/persona') && options.method === 'POST') {
-      return createMockResponse({ 
-        ok: true, 
-        id: Date.now(), 
-        message: "프로필이 성공적으로 생성되었습니다!" 
-      });
-    }
-    
-    // 캐릭터 목록 조회
-    if (endpoint.includes('/api/character') && (!options.method || options.method === 'GET')) {
-      return createMockResponse({ ok: true, characters: [] });
-    }
-    
-    // 기본 성공 응답
-    return createMockResponse({ ok: true, message: "Mock API 응답" });
-  }
-  
   const url = `${API_BASE_URL}${endpoint}`;
+  console.log('API Request:', { url, method: options.method });
   
   const defaultHeaders = {
     'Content-Type': 'application/json',
@@ -92,7 +64,9 @@ export const corsRequest = async (
   };
   
   try {
+    console.log('Making API request with options:', requestOptions);
     const response = await fetch(url, requestOptions);
+    console.log('API Response:', { status: response.status, ok: response.ok });
     
     // CORS 에러 확인
     if (!response.ok && response.status === 0) {
@@ -101,6 +75,7 @@ export const corsRequest = async (
     
     return response;
   } catch (error) {
+    console.error('API Request failed:', error);
     if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
       throw new Error('네트워크 오류: API 서버에 연결할 수 없습니다. CORS 설정을 확인해주세요.');
     }
@@ -111,7 +86,9 @@ export const corsRequest = async (
 // 간편한 GET 요청 헬퍼
 export const apiGet = async (endpoint: string) => {
   const response = await corsRequest(endpoint, { method: 'GET' });
-  return response.json();
+  const data = await response.json();
+  console.log('API GET Response:', { endpoint, data });
+  return data;
 };
 
 // 간편한 POST 요청 헬퍼
@@ -120,7 +97,9 @@ export const apiPost = async (endpoint: string, data: any) => {
     method: 'POST',
     body: JSON.stringify(data)
   });
-  return response.json();
+  const responseData = await response.json();
+  console.log('API POST Response:', { endpoint, requestData: data, responseData });
+  return responseData;
 };
 
 // 간편한 PUT 요청 헬퍼
@@ -129,11 +108,15 @@ export const apiPut = async (endpoint: string, data: any) => {
     method: 'PUT',
     body: JSON.stringify(data)
   });
-  return response.json();
+  const responseData = await response.json();
+  console.log('API PUT Response:', { endpoint, requestData: data, responseData });
+  return responseData;
 };
 
 // 간편한 DELETE 요청 헬퍼
 export const apiDelete = async (endpoint: string) => {
   const response = await corsRequest(endpoint, { method: 'DELETE' });
-  return response.json();
+  const data = await response.json();
+  console.log('API DELETE Response:', { endpoint, data });
+  return data;
 };
