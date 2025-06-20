@@ -14,9 +14,9 @@ export const pool = mysql.createPool({
   password: process.env.DB_PASSWORD || '1234',
   database: process.env.DB_DATABASE || 'lovlechat',
   
-  // 연결 풀 기본 설정
+  // 연결 풀 Vercel 최적화
   waitForConnections: true,
-  connectionLimit: isVercel ? 2 : (isProduction ? 8 : 15),
+  connectionLimit: isVercel ? 3 : (isProduction ? 8 : 15), // Vercel은 더 적게
   queueLimit: 0,
   
   // 기본 성능 설정
@@ -24,7 +24,7 @@ export const pool = mysql.createPool({
   charset: 'utf8mb4',
   
   // 타임아웃 설정 (Vercel 환경 최적화)
-  connectTimeout: isVercel ? 45000 : 20000,
+  connectTimeout: isVercel ? 60000 : 20000, // Vercel: 60초
   
   // SSL 설정 (운영 환경)
   ...(isProduction && {
@@ -64,10 +64,10 @@ if (!isProduction && !isVercel) {
   console.log('🔗 DB 연결 풀 초기화 완료 (로컬 모드)');
 }
 
-// 연결 풀 정리 타이머 (덜 빈번하게 호출)
+// 연결 풀 정리 타이머 최적화
 let cleanupTimer: NodeJS.Timeout | null = null;
 let lastCleanupTime = 0;
-const CLEANUP_INTERVAL = isProduction || isVercel ? 300000 : 600000; // 5-10분 간격
+const CLEANUP_INTERVAL = isVercel ? 180000 : 300000; // Vercel: 3분, 기타: 5분
 
 export const gracefulShutdown = () => {
   const now = Date.now();
@@ -85,24 +85,34 @@ export const gracefulShutdown = () => {
   cleanupTimer = setTimeout(async () => {
     try {
       lastCleanupTime = Date.now();
+      
+      // Vercel에서는 강제 종료하지 않고 유연하게 처리
+      if (isVercel) {
+        console.log('🌐 Vercel 환경: DB 연결 풀 유지');
+        return;
+      }
+      
       await pool.end();
       console.log('🔌 DB 연결 풀 정리 완료');
     } catch (error) {
       console.error('DB 연결 풀 정리 중 오류:', error);
     }
-  }, 2000); // 2초 지연 (기존 5초, 30초에서 단축)
+  }, isVercel ? 1000 : 2000); // Vercel은 더 빠르게
 };
 
-// 프로세스 종료시 정리 (한 번만 등록)
-let shutdownHandlersRegistered = false;
-if (!shutdownHandlersRegistered) {
-  process.on('SIGINT', gracefulShutdown);
-  process.on('SIGTERM', gracefulShutdown);
-  process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception:', error);
+// 프로세스 종료 시 정리 (Vercel 최적화)
+if (!isVercel) {
+  process.on('SIGINT', () => {
+    console.log('SIGINT 받음, DB 연결 정리 중...');
     gracefulShutdown();
+    process.exit(0);
   });
-  shutdownHandlersRegistered = true;
+  
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM 받음, DB 연결 정리 중...');
+    gracefulShutdown();
+    process.exit(0);
+  });
 }
 
 // 연결 풀 상태 확인 함수
@@ -121,36 +131,34 @@ export const getPoolStatus = () => {
   return poolInfo;
 };
 
-// 연결 상태 체크 함수
-export const checkConnection = async () => {
+// 연결 상태 체크 함수 최적화
+export const checkConnection = async (): Promise<boolean> => {
   try {
     const connection = await pool.getConnection();
-    await connection.ping(); // 연결 상태 확인
+    await connection.ping();
     connection.release();
-    if (process.env.NODE_ENV === 'development') {
-      console.log('✅ DB 연결 확인 완료');
-    }
+    console.log('✅ DB 연결 확인 완료');
     return true;
-  } catch (err: any) {
-    console.error('❌ DB 연결 실패:', {
-      message: err.message,
-      code: err.code,
-      host: process.env.DB_HOST,
-      database: process.env.DB_DATABASE,
-      isVercel,
-      isProduction
-    });
+  } catch (error: any) {
+    console.error('❌ DB 연결 실패:', error.message);
     return false;
   }
 };
 
-// Vercel 환경에서 연결 모니터링
+// Vercel 환경에서 연결 모니터링 강화
 if (isVercel) {
   console.log('🌐 Vercel 환경에서 실행 중 - DB 연결 최적화 적용');
-}
-
-// 정기적인 연결 상태 확인 (장시간 실행시 연결 유지)
-if (!isVercel) {
+  
+  // Vercel 환경에서는 더 자주 상태 체크
+  setInterval(async () => {
+    try {
+      await checkConnection();
+    } catch (error) {
+      console.warn('⚠️ Vercel 연결 체크 실패:', error);
+    }
+  }, 120000); // 2분마다 체크
+} else if (!isVercel) {
+  // 정기적인 연결 상태 확인 (장시간 실행시 연결 유지)
   setInterval(async () => {
     try {
       await checkConnection();
@@ -158,4 +166,23 @@ if (!isVercel) {
       console.warn('⚠️ 정기 연결 체크 실패:', error);
     }
   }, 600000); // 10분마다 체크
+}
+
+// 연결 풀 이벤트 리스너 (디버깅용)
+if (process.env.NODE_ENV === 'development' || isVercel) {
+  pool.on('connection', (connection) => {
+    console.log('🔗 새 DB 연결 생성:', connection.threadId);
+  });
+  
+  pool.on('acquire', (connection) => {
+    console.log('📥 DB 연결 획득:', connection.threadId);
+  });
+  
+  pool.on('release', (connection) => {
+    console.log('📤 DB 연결 반환:', connection.threadId);
+  });
+  
+  pool.on('enqueue', () => {
+    console.log('⏳ DB 연결 대기열에 추가');
+  });
 }
