@@ -1,23 +1,27 @@
 import mysql from "mysql2/promise";
-import { EventEmitter } from 'events';
 
-// EventEmitter 메모리 누수 완전 방지
-EventEmitter.defaultMaxListeners = 50;
-process.setMaxListeners(50);
-
-// uncaughtException 및 unhandledRejection 핸들러 추가
-process.removeAllListeners('uncaughtException');
-process.removeAllListeners('unhandledRejection');
-process.removeAllListeners('SIGTERM');
-process.removeAllListeners('SIGINT');
-
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error.message);
-});
-
-process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled Rejection:', reason);
-});
+// EventEmitter 메모리 누수 완전 방지 - 전역에서 한 번만 설정
+if (!process.env.DB_LISTENERS_CONFIGURED) {
+  require('events').EventEmitter.defaultMaxListeners = 100;
+  process.setMaxListeners(100);
+  
+  // 기존 리스너 정리 (안전하게)
+  const existingListeners = process.listenerCount('uncaughtException');
+  if (existingListeners === 0) {
+    process.on('uncaughtException', (error) => {
+      console.error('🚨 Uncaught Exception:', error.message);
+    });
+  }
+  
+  const existingRejectionListeners = process.listenerCount('unhandledRejection');
+  if (existingRejectionListeners === 0) {
+    process.on('unhandledRejection', (reason) => {
+      console.error('🚨 Unhandled Rejection:', reason);
+    });
+  }
+  
+  process.env.DB_LISTENERS_CONFIGURED = 'true';
+}
 
 // 환경 감지 최적화
 const isVercel = !!(process.env.VERCEL || process.env.VERCEL_ENV || process.env.VERCEL_URL);
@@ -34,7 +38,7 @@ const connectionConfig: mysql.PoolOptions = {
   charset: 'utf8mb4',
   
   // 최적화된 풀 설정
-  connectionLimit: isVercel ? 1 : (isLocal ? 3 : 2),
+  connectionLimit: isVercel ? 1 : (isLocal ? 2 : 3),
   
   // 대기열 설정
   waitForConnections: true,
@@ -44,25 +48,69 @@ const connectionConfig: mysql.PoolOptions = {
   ssl: isLocal ? undefined : { rejectUnauthorized: false }
 };
 
-// 완전 최적화된 싱글톤 패턴
-class UltraOptimizedDatabaseManager {
-  private static instance: UltraOptimizedDatabaseManager | null = null;
+// 전역 싱글톤 패턴 (더 엄격한 구현)
+class GlobalDatabaseManager {
+  private static instance: GlobalDatabaseManager | null = null;
+  private static initPromise: Promise<GlobalDatabaseManager> | null = null;
   private pool: mysql.Pool | null = null;
   private isInitialized = false;
-  private initPromise: Promise<void> | null = null;
   private lastHealthCheck = 0;
   private healthCheckInterval = 60000; // 1분
   private cleanupRegistered = false;
 
   private constructor() {
-    this.registerCleanup();
+    // private constructor로 직접 인스턴스 생성 방지
   }
 
-  static getInstance(): UltraOptimizedDatabaseManager {
-    if (!UltraOptimizedDatabaseManager.instance) {
-      UltraOptimizedDatabaseManager.instance = new UltraOptimizedDatabaseManager();
+  static async getInstance(): Promise<GlobalDatabaseManager> {
+    if (GlobalDatabaseManager.instance) {
+      return GlobalDatabaseManager.instance;
     }
-    return UltraOptimizedDatabaseManager.instance;
+
+    if (GlobalDatabaseManager.initPromise) {
+      return GlobalDatabaseManager.initPromise;
+    }
+
+    GlobalDatabaseManager.initPromise = GlobalDatabaseManager.createInstance();
+    return GlobalDatabaseManager.initPromise;
+  }
+
+  private static async createInstance(): Promise<GlobalDatabaseManager> {
+    const instance = new GlobalDatabaseManager();
+    await instance.initialize();
+    GlobalDatabaseManager.instance = instance;
+    return instance;
+  }
+
+  private async initialize(): Promise<void> {
+    if (this.isInitialized && this.pool) {
+      return;
+    }
+
+    try {
+      // 기존 풀 정리
+      if (this.pool) {
+        await this.pool.end().catch(() => {});
+        this.pool = null;
+      }
+
+      if (!isProduction) {
+        console.log(`🔗 DB 연결 풀 초기화 완료 (${isVercel ? 'Vercel' : isLocal ? '로컬' : '프로덕션'} 모드)`);
+      }
+      
+      this.pool = mysql.createPool(connectionConfig);
+      
+      // 연결 테스트
+      await this.testConnection();
+      this.isInitialized = true;
+      this.registerCleanup();
+      
+    } catch (error: any) {
+      console.error('❌ DB 초기화 실패:', error.message);
+      this.pool = null;
+      this.isInitialized = false;
+      throw error;
+    }
   }
 
   private registerCleanup(): void {
@@ -72,55 +120,18 @@ class UltraOptimizedDatabaseManager {
       this.cleanup().catch(() => {});
     };
 
-    process.once('SIGINT', cleanup);
-    process.once('SIGTERM', cleanup);
-    process.once('beforeExit', cleanup);
+    // 안전한 리스너 등록
+    if (process.listenerCount('SIGINT') < 5) {
+      process.once('SIGINT', cleanup);
+    }
+    if (process.listenerCount('SIGTERM') < 5) {
+      process.once('SIGTERM', cleanup);
+    }
+    if (process.listenerCount('beforeExit') < 5) {
+      process.once('beforeExit', cleanup);
+    }
     
     this.cleanupRegistered = true;
-  }
-
-  private async initialize(): Promise<void> {
-    if (this.isInitialized && this.pool) {
-      return;
-    }
-
-    if (this.initPromise) {
-      return this.initPromise;
-    }
-
-    this.initPromise = this.createPool();
-    await this.initPromise;
-  }
-
-  private async createPool(): Promise<void> {
-    try {
-      // 기존 풀 정리
-      if (this.pool) {
-        await this.pool.end().catch(() => {});
-        this.pool = null;
-      }
-
-      if (!isProduction) {
-        console.log(`🔗 DB 연결 풀 초기화 (${isVercel ? 'Vercel' : isLocal ? 'Local' : 'Prod'} 모드)`);
-      }
-      
-      this.pool = mysql.createPool(connectionConfig);
-      
-      // 연결 테스트
-      await this.testConnection();
-      this.isInitialized = true;
-      
-      if (!isProduction) {
-        console.log('✅ DB 연결 확인 완료');
-      }
-      
-    } catch (error: any) {
-      console.error('❌ DB 초기화 실패:', error.message);
-      this.pool = null;
-      this.isInitialized = false;
-      this.initPromise = null;
-      throw error;
-    }
   }
 
   private async testConnection(): Promise<void> {
@@ -157,8 +168,7 @@ class UltraOptimizedDatabaseManager {
 
   private async reconnect(): Promise<void> {
     this.isInitialized = false;
-    this.initPromise = null;
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 200));
     await this.initialize();
   }
 
@@ -190,7 +200,6 @@ class UltraOptimizedDatabaseManager {
       } finally {
         this.pool = null;
         this.isInitialized = false;
-        this.initPromise = null;
       }
     }
   }
@@ -205,12 +214,10 @@ class UltraOptimizedDatabaseManager {
   }
 }
 
-// 글로벌 싱글톤 인스턴스
-const dbManager = UltraOptimizedDatabaseManager.getInstance();
-
 // 최적화된 풀 접근 함수
 export async function getPool(): Promise<mysql.Pool> {
-  return dbManager.getPool();
+  const manager = await GlobalDatabaseManager.getInstance();
+  return manager.getPool();
 }
 
 // 호환성 유지를 위한 풀 래퍼
@@ -248,15 +255,17 @@ export async function warmupConnection(): Promise<boolean> {
 }
 
 export async function getConnectionStatus() {
-  return dbManager.getStatus();
+  const manager = await GlobalDatabaseManager.getInstance();
+  return manager.getStatus();
 }
 
 export async function forceReconnect(): Promise<void> {
+  const manager = await GlobalDatabaseManager.getInstance();
   if (!isProduction) {
     console.log('🔄 강제 DB 재연결');
   }
-  await dbManager.cleanup();
-  await dbManager.getPool();
+  await manager.cleanup();
+  await manager.getPool();
 }
 
 // Vercel 환경에서만 즉시 웜업
