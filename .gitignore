@@ -37,3 +37,20 @@ yarn-error.log*
 .cache/
 .npm/
 .yarn/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*_backup_*.sql
+lovlechat_backup_*.sql
+lovlechat_data_only.sql
+
+# Large SQL files (keep schema files only)
+complete_rds_schema.sql
+rds_complete_schema.sql
+
+# Generated files
+.vercel/
