@@ -22,8 +22,7 @@ export async function GET(request: NextRequest) {
     // 사용자 하트 조회 (없으면 자동 생성)
     let user = await executeQuery(
       'SELECT userId, hearts, lastHeartUpdate FROM users WHERE userId = ?',
-      [userId],
-      5000
+      [userId]
     );
 
     console.log('DB 조회 결과:', { userId, user }); // 디버깅 로그
@@ -33,14 +32,12 @@ export async function GET(request: NextRequest) {
       console.log('사용자 없음 - 새로 생성:', userId);
       await executeQuery(
         'INSERT INTO users (userId, hearts) VALUES (?, 100) ON DUPLICATE KEY UPDATE hearts = hearts',
-        [userId],
-        5000
+        [userId]
       );
       
       user = await executeQuery(
         'SELECT userId, hearts, lastHeartUpdate FROM users WHERE userId = ?',
-        [userId],
-        5000
+        [userId]
       );
       console.log('생성 후 사용자:', user);
     } else {
@@ -101,22 +98,19 @@ export async function POST(request: NextRequest) {
     // 현재 하트 조회
     const user = await executeQuery(
       'SELECT hearts FROM users WHERE userId = ?',
-      [userId],
-      5000
+      [userId]
     );
 
     if (!user || user.length === 0) {
       // 사용자가 없으면 새로 생성
       await executeQuery(
         'INSERT INTO users (userId, hearts) VALUES (?, 100)',
-        [userId],
-        5000
+        [userId]
       );
       
       const newUser = await executeQuery(
         'SELECT hearts FROM users WHERE userId = ?',
-        [userId],
-        5000
+        [userId]
       );
       
       if (newUser[0].hearts < amount) {
@@ -153,8 +147,8 @@ export async function POST(request: NextRequest) {
     // DB 연결 및 트랜잭션으로 하트 차감 및 내역 저장
     connection = await pool.getConnection();
     
-    // 트랜잭션 명령어는 query() 메서드 사용 (prepared statement 호환성 문제 해결)
-    await connection.query('START TRANSACTION');
+    // 트랜잭션 시작 (올바른 방법)
+    await connection.beginTransaction();
 
     try {
       // 하트 차감 (execute() 메서드 사용)
@@ -169,8 +163,8 @@ export async function POST(request: NextRequest) {
         [userId, -amount, type, description, currentHearts, newHearts, relatedId]
       );
 
-      // 트랜잭션 커밋 (query() 메서드 사용)
-      await connection.query('COMMIT');
+      // 트랜잭션 커밋 (올바른 방법)
+      await connection.commit();
 
       return NextResponse.json({
         ok: true,
@@ -184,8 +178,8 @@ export async function POST(request: NextRequest) {
       });
 
     } catch (error) {
-      // 트랜잭션 롤백 (query() 메서드 사용)
-      await connection.query('ROLLBACK');
+      // 트랜잭션 롤백 (올바른 방법)
+      await connection.rollback();
       throw error;
     }
 
