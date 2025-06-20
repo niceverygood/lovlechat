@@ -15,6 +15,47 @@ interface Props {
   onProfileClick?: () => void;
 }
 
+// 행동묘사와 대사를 파싱하는 함수
+function parseMessageText(text: string) {
+  // *텍스트* 패턴을 찾아서 행동묘사로 변환
+  const parts = text.split(/(\*[^*]+\*)/g);
+  
+  return parts.map((part, index) => {
+    if (part.startsWith('*') && part.endsWith('*')) {
+      // 행동묘사 스타일
+      const actionText = part.slice(1, -1); // *제거
+      return (
+        <span
+          key={index}
+          style={{
+            fontStyle: 'italic',
+            color: '#9575cd',
+            fontSize: '15px',
+            fontWeight: 500,
+            opacity: 0.95,
+            textShadow: '0 2px 4px rgba(0, 0, 0, 0.5), 0 0 4px rgba(255, 255, 255, 0.4)'
+          }}
+        >
+          {actionText}
+        </span>
+      );
+    } else {
+      // 일반 대사 스타일
+      return (
+        <span
+          key={index}
+          style={{
+            fontWeight: 400,
+            lineHeight: '1.4'
+          }}
+        >
+          {part}
+        </span>
+      );
+    }
+  });
+}
+
 export default function MessageBubble({ message, onProfileClick }: Props) {
   const isUser = message.sender === "user";
   return (
@@ -73,7 +114,7 @@ export default function MessageBubble({ message, onProfileClick }: Props) {
           wordBreak: 'break-word',
         }}
       >
-        {message.text}
+        {parseMessageText(message.text)}
       </div>
       )}
     </div>

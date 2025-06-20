@@ -1,0 +1,24 @@
+.messages-container {
+  /* Firefox */
+  scrollbar-width: none;
+  /* IE and Edge */
+  -ms-overflow-style: none;
+}
+
+/* Chrome, Safari, Opera */
+.messages-container::-webkit-scrollbar {
+  display: none;
+}
+
+/* 채팅 컨테이너 전체에도 적용 */
+.chat-container {
+  /* Firefox */
+  scrollbar-width: none;
+  /* IE and Edge */
+  -ms-overflow-style: none;
+}
+
+/* Chrome, Safari, Opera */
+.chat-container::-webkit-scrollbar {
+  display: none;
+} 

@@ -17,7 +17,7 @@ export default function CharacterCreatePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [gender, setGender] = useState("설정하지 않음");
-  const [scope, setScope] = useState("비공개");
+  const [scope, setScope] = useState("공개");
   const [roomCode, setRoomCode] = useState("");
   const [category, setCategory] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -122,6 +122,10 @@ export default function CharacterCreatePage() {
     }
     if (!firstMessage.trim()) {
       setToast({ message: "채팅 첫 마디를 입력해주세요.", type: "error" });
+      return;
+    }
+    if (!category) {
+      setToast({ message: "카테고리를 선택해주세요.", type: "error" });
       return;
     }
     
@@ -310,24 +314,35 @@ export default function CharacterCreatePage() {
       </div>
       {/* 해시태그 선택 */}
       <div style={{ background: "var(--color-card)", borderRadius: 20, margin: 20, padding: 20 }}>
-        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 12 }}>해시태그 추가</div>
+        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 12 }}>
+          해시태그 추가 <span style={{ color: 'var(--color-point)', fontWeight: 700, fontSize: 15 }}>({selectedTags.length}/7)</span>
+        </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          {hashtags.map(tag => (
-            <button
-              key={tag}
-              onClick={() => setSelectedTags(selectedTags.includes(tag) ? selectedTags.filter(t => t !== tag) : [...selectedTags, tag])}
-              style={{
-                background: selectedTags.includes(tag) ? "var(--color-point)" : "var(--color-card-alt)",
-                color: selectedTags.includes(tag) ? "#fff" : "var(--color-text)",
-                border: "none",
-                borderRadius: 16,
-                padding: "6px 16px",
-                fontWeight: 600,
-                fontSize: 15,
-                cursor: "pointer"
-              }}
-            >{tag}</button>
-          ))}
+          {hashtags.map(tag => {
+            const isSelected = selectedTags.includes(tag);
+            const isDisabled = !isSelected && selectedTags.length >= 7;
+            return (
+              <button
+                key={tag}
+                onClick={() => {
+                  if (isSelected) setSelectedTags(selectedTags.filter(t => t !== tag));
+                  else if (!isDisabled) setSelectedTags([...selectedTags, tag]);
+                }}
+                disabled={isDisabled}
+                style={{
+                  background: isSelected ? "var(--color-point)" : "var(--color-card-alt)",
+                  color: isSelected ? "#fff" : "var(--color-text)",
+                  border: "none",
+                  borderRadius: 16,
+                  padding: "6px 16px",
+                  fontWeight: 600,
+                  fontSize: 15,
+                  cursor: isDisabled ? "not-allowed" : "pointer",
+                  opacity: isDisabled ? 0.5 : 1
+                }}
+              >{tag}</button>
+            );
+          })}
         </div>
       </div>
       {/* 카테고리 선택 */}
@@ -383,12 +398,14 @@ export default function CharacterCreatePage() {
           <div style={{ fontWeight: 700, fontSize: 16 }}>배경 이미지 <span style={{ color: 'var(--color-subtext)', fontWeight: 400, fontSize: 14 }}>(선택, 9:16 비율 권장)</span></div>
           <div style={{ color: 'var(--color-subtext)', fontSize: 13, marginBottom: 8 }}>이미지를 등록하지 않으면 캐릭터 프로필 사진이 배경으로 활용됩니다.</div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            {backgroundImg ? (
+            {(backgroundImg || profileImg) ? (
               <div style={{ position: "relative" }}>
-                <img src={backgroundImg} alt="배경" style={{ width: 120, height: 213, borderRadius: 12, objectFit: "cover", border: "1px solid var(--color-border)" }} />
-                <button type="button" onClick={handleRemoveBackgroundImg} style={{ position: "absolute", top: -8, right: -8, background: "var(--color-point)", color: "#fff", border: "none", borderRadius: "50%", width: 22, height: 22, fontSize: 14, cursor: "pointer" }}>✕</button>
+                <img src={backgroundImg || profileImg || '/imgdefault.jpg'} alt="배경" style={{ width: 120, height: 213, borderRadius: 12, objectFit: "cover", border: "1px solid var(--color-border)" }} />
+                {backgroundImg && (
+                  <button type="button" onClick={handleRemoveBackgroundImg} style={{ position: "absolute", top: -8, right: -8, background: "var(--color-point)", color: "#fff", border: "none", borderRadius: "50%", width: 22, height: 22, fontSize: 14, cursor: "pointer" }}>✕</button>
+                )}
               </div>
-            ) : (
+            ) :
               <button type="button" onClick={handleBackgroundImgClick} style={{ width: 120, height: 213, borderRadius: 12, border: "1.5px dashed var(--color-point)", background: "var(--color-card-alt)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32, color: "var(--color-point)", cursor: "pointer", position: 'relative' }}>
                 <span style={{
                   background: "var(--color-point)",
@@ -406,7 +423,7 @@ export default function CharacterCreatePage() {
                   transform: 'translate(-50%, -50%)'
                 }}>+</span>
               </button>
-            )}
+            }
             <input ref={backgroundImgInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleBackgroundImgChange} />
           </div>
         </div>

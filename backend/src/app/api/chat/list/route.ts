@@ -1,7 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { executeQuery } from "@/lib/db-helper";
 
+// CORS 헤더 공통 설정
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, cache-control, x-requested-with',
+};
+
 export async function GET(req: NextRequest) {
+  const searchParams = req.nextUrl.searchParams;
+  const userId = searchParams.get('userId');
+  
+  // userId 필수 검증
+  if (!userId) {
+    return NextResponse.json(
+      { ok: false, error: 'userId is required' },
+      { 
+        status: 400,
+        headers: CORS_HEADERS
+      }
+    );
+  }
+
   // 더미 채팅 데이터 (DB 연결 실패시 폴백용)
   const fallbackChats = [
     {
@@ -18,41 +39,56 @@ export async function GET(req: NextRequest) {
   ];
 
     try {
-    // 최적화된 채팅 리스트 조회
+    // 직접 JOIN을 사용하여 사용자의 채팅 리스트를 가져옴
     const rows = await executeQuery(
-      `SELECT c.characterId, c.personaId, c.message as lastMessage, c.sender as lastSender, c.createdAt as lastMessageAt,
-              up.name as personaName, up.avatar as personaAvatar,
-              p.name, p.profileImg
-         FROM (
-           SELECT characterId, personaId, MAX(createdAt) as lastMessageAt
-           FROM chats
-           GROUP BY characterId, personaId
-         ) t
-         JOIN chats c ON c.characterId = t.characterId AND c.personaId = t.personaId AND c.createdAt = t.lastMessageAt
-         JOIN character_profiles p ON c.characterId = p.id
-         LEFT JOIN user_personas up ON c.personaId = up.id
-        ORDER BY c.createdAt DESC LIMIT 50`,
-      [],
-      6000
+      `SELECT 
+         c1.characterId, 
+         c1.personaId, 
+         c1.message as lastMessage,
+         c1.sender as lastSender,
+         c1.createdAt as lastMessageAt,
+         p.name as personaName, 
+         p.avatar as personaAvatar,
+         cp.name, 
+         cp.profileImg
+       FROM chats c1
+       INNER JOIN (
+         SELECT 
+           c2.characterId, 
+           c2.personaId, 
+           MAX(c2.createdAt) as maxCreatedAt
+         FROM chats c2
+         INNER JOIN personas p2 ON c2.personaId = p2.id
+         WHERE p2.userId = ?
+         GROUP BY c2.characterId, c2.personaId
+       ) latest ON c1.characterId = latest.characterId 
+                   AND c1.personaId = latest.personaId 
+                   AND c1.createdAt = latest.maxCreatedAt
+       JOIN personas p ON c1.personaId = p.id
+       JOIN character_profiles cp ON c1.characterId = cp.id
+       ORDER BY c1.createdAt DESC 
+       LIMIT 50`,
+      [userId]
     );
     
     return NextResponse.json({ ok: true, chats: rows }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      }
+      headers: CORS_HEADERS
     });
   } catch (err) {
     console.error("DB error:", err);
     
     // DB 에러시 항상 폴백 데이터 반환
     return NextResponse.json({ ok: true, chats: fallbackChats, fallback: true }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      }
+      headers: CORS_HEADERS
     });
   }
+}
+
+export async function OPTIONS() {
+  return NextResponse.json(
+    {},
+    {
+      headers: CORS_HEADERS,
+      }
+  );
 } 

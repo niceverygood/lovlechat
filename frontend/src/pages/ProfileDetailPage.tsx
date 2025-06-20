@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Skeleton from "../components/Skeleton";
 import { API_BASE_URL } from '../lib/openai';
+import CustomAlert from '../components/CustomAlert';
 
 interface Persona {
   id: string;
@@ -21,6 +22,9 @@ export default function ProfileDetailPage() {
   const navigate = useNavigate();
   const [persona, setPersona] = useState<Persona | null>(null);
   const [loading, setLoading] = useState(true);
+  const [alertOpen, setAlertOpen] = useState(false);
+  const [alertMsg, setAlertMsg] = useState('');
+  const [alertTitle, setAlertTitle] = useState('');
 
   useEffect(() => {
     if (!personaId) return;
@@ -36,7 +40,9 @@ export default function ProfileDetailPage() {
     if (!persona) return;
     if (window.confirm("정말로 삭제하시겠습니까?")) {
       await fetch(`${API_BASE_URL}/api/persona/${persona.id}`, { method: "DELETE" });
-      alert("삭제되었습니다.");
+      setAlertTitle('삭제 완료');
+      setAlertMsg('삭제되었습니다.');
+      setAlertOpen(true);
       navigate(-1);
     }
   };
@@ -75,6 +81,7 @@ export default function ProfileDetailPage() {
           <button onClick={handleDelete} style={{ background: "var(--color-card)", color: "var(--color-point)", border: "1.5px solid var(--color-point)", borderRadius: 12, padding: "10px 24px", fontWeight: 700, fontSize: 16, cursor: "pointer" }}>삭제</button>
         </div>
       </div>
+      <CustomAlert open={alertOpen} title={alertTitle} message={alertMsg} onConfirm={() => setAlertOpen(false)} />
     </div>
   );
 } 

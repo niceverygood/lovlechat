@@ -1,58 +1,90 @@
-import { NextRequest, NextResponse } from "next/server";
-import { executeQuery, executeMutation } from "@/lib/db-helper";
+import { NextRequest } from "next/server";
+import { executeQuery, executeMutation, executeQueryWithCache, parseJsonSafely } from "@/lib/db-helper";
+import { successResponse, errorResponse, optionsResponse, fallbackResponse } from "@/lib/cors";
 
+/**
+ * Character API - AI 상대방 캐릭터 관리 (최적화됨)
+ * 
+ * 개념 정리:
+ * - User: 구글 로그인한 실제 사용자 1명 (Firebase Auth uid)
+ * - Persona: User가 만드는 여러 개의 프로필 (프론트: "멀티프로필")  
+ * - Character: AI 상대방 캐릭터 (이 API에서 관리하는 대상)
+ * 
+ * Character는 User가 채팅할 AI 상대방
+ * - 복잡한 성격, 배경, 첫 상황/대사 등 상세한 설정 포함
+ * - User가 직접 생성하거나 미리 만들어진 캐릭터
+ * - User의 여러 Persona로 동일한 Character와 채팅 가능
+ */
+
+// 데이터 정규화 함수
+function normalizeCharacterData(data: any) {
+  return {
+    userId: String(data.userId || '').trim(),
+    profileImg: data.profileImg || '/imgdefault.jpg',
+    name: String(data.name || '').trim().slice(0, 15),
+    age: data.age ? Math.min(Math.max(parseInt(data.age) || 0, 0), 150) : 0,
+    job: data.job ? String(data.job).trim().slice(0, 15) : '',
+    oneLiner: data.oneLiner ? String(data.oneLiner).trim().slice(0, 80) : '',
+    background: data.background ? String(data.background).trim().slice(0, 700) : '',
+    personality: data.personality ? String(data.personality).trim().slice(0, 300) : '',
+    habit: data.habit ? String(data.habit).trim().slice(0, 100) : '',
+    like: data.like ? String(data.like).trim().slice(0, 50) : '',
+    dislike: data.dislike ? String(data.dislike).trim().slice(0, 50) : '',
+    extraInfos: Array.isArray(data.extraInfos) ? data.extraInfos.slice(0, 10) : [],
+    gender: data.gender || '',
+    scope: data.scope || 'private',
+    roomCode: data.roomCode || '',
+    category: data.category || '',
+    selectedTags: Array.isArray(data.selectedTags) ? data.selectedTags.slice(0, 20) : [],
+    attachments: Array.isArray(data.attachments) ? data.attachments.slice(0, 5) : [],
+    firstScene: data.firstScene ? String(data.firstScene).trim().slice(0, 200) : '',
+    firstMessage: data.firstMessage ? String(data.firstMessage).trim().slice(0, 200) : '',
+    backgroundImg: data.backgroundImg || '/imgdefault.jpg'
+  };
+}
+
+// 폴백 캐릭터 데이터 (성능 최적화)
+const FALLBACK_CHARACTERS = [
+  {
+    id: "1",
+    profileImg: "/imgdefault.jpg",
+    name: "아이유",
+    age: "30",
+    job: "가수",
+    oneLiner: "안녕하세요! 아이유입니다.",
+    selectedTags: ["친절한", "밝은", "음악"],
+    attachments: null,
+    firstScene: "카페",
+    firstMessage: "안녕하세요! 오늘 하루는 어떠셨나요?",
+    backgroundImg: "/imgdefault.jpg"
+  },
+  {
+    id: "2", 
+    profileImg: "/imgdefault.jpg",
+    name: "김태연",
+    age: "35",
+    job: "가수",
+    oneLiner: "소녀시대 태연입니다!",
+    selectedTags: ["리더십", "실력파", "카리스마"],
+    attachments: null,
+    firstScene: "연습실",
+    firstMessage: "안녕! 오늘도 열심히 해보자!",
+    backgroundImg: "/imgdefault.jpg"
+  }
+];
 
 export async function POST(req: NextRequest) {
-  const data = await req.json();
-  
-  // 필수 필드 검증 추가
-  const {
-    userId, profileImg, name, age, job, oneLiner, background, personality, habit, like, dislike,
-    extraInfos, gender, scope, roomCode, category, selectedTags, attachments, firstScene, firstMessage, backgroundImg
-  } = data;
-  
-  // 입력 데이터 검증
-  if (!userId || !name?.trim()) {
-    return NextResponse.json(
-      { ok: false, error: "userId와 name은 필수입니다." }, 
-      { 
-        status: 400,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
-      }
-    );
-  }
-  
-  // 데이터 정규화 및 검증
-  const normalizedData = {
-    userId: String(userId).trim(),
-    profileImg: profileImg || '/imgdefault.jpg',
-    name: String(name).trim().slice(0, 15), // 최대 15자
-    age: age ? Math.min(Math.max(parseInt(age) || 0, 0), 150) : 0,
-    job: job ? String(job).trim().slice(0, 15) : '',
-    oneLiner: oneLiner ? String(oneLiner).trim().slice(0, 80) : '',
-    background: background ? String(background).trim().slice(0, 700) : '',
-    personality: personality ? String(personality).trim().slice(0, 300) : '',
-    habit: habit ? String(habit).trim().slice(0, 100) : '',
-    like: like ? String(like).trim().slice(0, 50) : '',
-    dislike: dislike ? String(dislike).trim().slice(0, 50) : '',
-    extraInfos: Array.isArray(extraInfos) ? extraInfos.slice(0, 10) : [],
-    gender: gender || '',
-    scope: scope || 'private',
-    roomCode: roomCode || '',
-    category: category || '',
-    selectedTags: Array.isArray(selectedTags) ? selectedTags.slice(0, 20) : [],
-    attachments: Array.isArray(attachments) ? attachments.slice(0, 5) : [],
-    firstScene: firstScene ? String(firstScene).trim().slice(0, 200) : '',
-    firstMessage: firstMessage ? String(firstMessage).trim().slice(0, 200) : '',
-    backgroundImg: backgroundImg || '/imgdefault.jpg'
-  };
-  
   try {
-    // 최적화된 INSERT 쿼리 (필수 필드 먼저 삽입)
+    const data = await req.json();
+    
+    // 필수 필드 검증
+    if (!data.userId || !data.name?.trim()) {
+      return errorResponse("userId와 name은 필수입니다.", 400);
+    }
+    
+    const normalizedData = normalizeCharacterData(data);
+    
+    // 최적화된 INSERT 쿼리
     const result = await executeMutation(
       `INSERT INTO character_profiles
         (userId, profileImg, name, age, job, oneLiner, background, personality, habit, 
@@ -82,40 +114,24 @@ export async function POST(req: NextRequest) {
         normalizedData.firstMessage,
         normalizedData.backgroundImg
       ],
-      8000 // 타임아웃 단축 (10초 → 8초)
+      6000 // 타임아웃 최적화
     );
     
     const [insertResult] = result as any;
     
-    return NextResponse.json({ 
-      ok: true, 
+    return successResponse({ 
       id: insertResult.insertId,
       message: "캐릭터가 성공적으로 생성되었습니다!"
-    }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      }
     });
+    
   } catch (err) {
-    console.error("Database error:", err);
+    console.error("Character creation error:", err);
     
-    // DB 연결 실패 시 폴백 처리 (안정성 보장)
+    // 폴백 처리
     const tempId = Date.now();
-    console.log(`캐릭터 생성 폴백 처리: ${normalizedData.name} (임시 ID: ${tempId})`);
-    
-    return NextResponse.json({ 
-      ok: true, 
-      id: tempId, 
-      fallback: true,
+    return fallbackResponse({ 
+      id: tempId,
       message: "캐릭터가 임시 저장되었습니다. 잠시 후 다시 확인해주세요."
-    }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      }
     });
   }
 }
@@ -123,106 +139,63 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const userId = req.nextUrl.searchParams.get('userId');
   
-  // 폴백 캐릭터 데이터
-  const fallbackCharacters = [
-    {
-      id: "1",
-      profileImg: "/imgdefault.jpg",
-      name: "아이유",
-      age: "30",
-      job: "가수",
-      oneLiner: "안녕하세요! 아이유입니다.",
-      attachments: null,
-      firstScene: "카페",
-      firstMessage: "안녕하세요! 오늘 하루는 어떠셨나요?",
-      backgroundImg: "/imgdefault.jpg"
-    },
-    {
-      id: "2", 
-      profileImg: "/imgdefault.jpg",
-      name: "김태연",
-      age: "35",
-      job: "가수",
-      oneLiner: "소녀시대 태연입니다!",
-      attachments: null,
-      firstScene: "연습실",
-      firstMessage: "안녕! 오늘도 열심히 해보자!",
-      backgroundImg: "/imgdefault.jpg"
-    }
-  ];
-
-  if (userId) {
-    try {
-      // character_hidden 테이블이 없을 수 있으므로 단순화된 쿼리 사용
-      const rows = await executeQuery(
-        `SELECT id, profileImg, name, age, job, oneLiner, attachments, firstScene, firstMessage, backgroundImg 
+  try {
+    if (userId) {
+      // 사용자별 캐릭터 조회 (캐시 적용)
+      const rows = await executeQueryWithCache(
+        `SELECT id, profileImg, name, age, job, oneLiner, category, tags, attachments, 
+                likes, dislikes, firstScene, firstMessage, backgroundImg 
          FROM character_profiles 
          WHERE userId = ?
          ORDER BY createdAt DESC LIMIT 10`,
         [userId],
-        8000
+        180, // 3분 캐시
+        5000
       );
       
-      return NextResponse.json({ ok: true, characters: rows }, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
-      });
-    } catch (err) {
-      console.error("Database error:", err);
+      // 프론트엔드 호환성을 위해 selectedTags 및 like/dislike 필드 변환
+      const charactersWithSelectedTags = rows.map((char: any) => ({
+        ...char,
+        like: char.likes,       // DB likes → 프론트 like
+        dislike: char.dislikes, // DB dislikes → 프론트 dislike
+        selectedTags: parseJsonSafely(char.tags) || []
+      }));
       
-      // DB 연결 실패 시 폴백 데이터로 응답 (사용자 경험 보장)
-      return NextResponse.json({ ok: true, characters: fallbackCharacters, fallback: true }, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        }
-      });
+      return successResponse({ characters: charactersWithSelectedTags });
     }
-  }
-  
-  // 전체 조회 (For You) - 폴백 데이터 우선 반환
-  try {
-    // 최적화된 전체 캐릭터 조회
-    const rows = await executeQuery(
-      "SELECT id, profileImg, name, age, job, oneLiner, attachments, firstScene, firstMessage, backgroundImg FROM character_profiles ORDER BY createdAt DESC LIMIT 20",
+    
+    // 전체 조회 (For You) - 캐시 적용
+    const rows = await executeQueryWithCache(
+      `SELECT id, profileImg, name, age, job, oneLiner, tags, attachments, 
+              likes, dislikes, firstScene, firstMessage, backgroundImg 
+       FROM character_profiles 
+       WHERE scope = '공개' 
+       ORDER BY RAND() LIMIT 5`,
       [],
-      6000
+      300, // 5분 캐시
+      4000
     );
     
-    return NextResponse.json({ ok: true, characters: rows }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      }
-    });
-  } catch (err) {
-    console.error("Database error:", err);
+    // 프론트엔드 호환성을 위해 selectedTags 및 like/dislike 필드 변환
+    const charactersWithSelectedTags = rows.map((char: any) => ({
+      ...char,
+      like: char.likes,       // DB likes → 프론트 like
+      dislike: char.dislikes, // DB dislikes → 프론트 dislike
+      selectedTags: parseJsonSafely(char.tags) || []
+    }));
     
-    // DB 연결 실패 시 폴백 데이터로 응답
-    return NextResponse.json({ ok: true, characters: fallbackCharacters, fallback: true }, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      }
-    });
+    return successResponse({ characters: charactersWithSelectedTags });
+    
+  } catch (err) {
+    console.error("Character GET error:", err);
+    
+    // 폴백 데이터 반환
+    return fallbackResponse({ 
+      characters: FALLBACK_CHARACTERS 
+    }, "데이터를 임시로 제공하고 있습니다.");
   }
 }
 
 export async function OPTIONS() {
-  return NextResponse.json(
-    {},
-    {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-      },
-    }
-  );
+  return optionsResponse();
 } 

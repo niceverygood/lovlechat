@@ -1,11 +1,11 @@
 import { pool } from './db';
 import { FieldPacket, QueryResult, ResultSetHeader, RowDataPacket } from 'mysql2';
 
-// 재시도 설정
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000; // 1초
+// 재시도 설정 최적화
+const MAX_RETRIES = 2; // 3 → 2
+const RETRY_DELAY = 500; // 1초 → 0.5초
 
-// 재시도 헬퍼 함수
+// 재시도 헬퍼 함수 최적화
 async function withRetry<T>(
   operation: () => Promise<T>,
   retries: number = MAX_RETRIES,
@@ -15,24 +15,35 @@ async function withRetry<T>(
     return await operation();
   } catch (error: any) {
     if (retries > 0 && shouldRetry(error)) {
-      console.log(`DB 작업 재시도... 남은 횟수: ${retries}, 에러: ${error.message}`);
+      // 로그 출력 최소화
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`재시도... 남은 횟수: ${retries}`);
+      }
       await new Promise(resolve => setTimeout(resolve, delay));
-      return withRetry(operation, retries - 1, delay * 1.5); // 지수 백오프
+      return withRetry(operation, retries - 1, delay * 1.2); // 지수 백오프 축소 (1.5 → 1.2)
     }
     throw error;
   }
 }
 
-// 재시도 가능한 에러 판단
+// 재시도 가능한 에러 판단 최적화
 function shouldRetry(error: any): boolean {
   const retryableCodes = [
     'ECONNRESET',
-    'ENOTFOUND', 
     'ETIMEDOUT',
     'ECONNREFUSED',
     'ER_LOCK_WAIT_TIMEOUT',
     'ER_LOCK_DEADLOCK'
-  ];
+  ]; // 불필요한 에러 코드 제거
+  
+  // 로그 출력 최소화
+  if (process.env.NODE_ENV === 'development') {
+    console.error('DB 에러:', {
+      code: error.code,
+      message: error.message
+    });
+  }
+  
   return retryableCodes.includes(error.code) || 
          error.message?.includes('TIMEOUT') ||
          error.message?.includes('Connection lost');
@@ -42,31 +53,46 @@ function shouldRetry(error: any): boolean {
 export async function executeQuery<T = any>(
   query: string, 
   params: any[] = [], 
-  timeoutMs: number = 5000
+  timeoutMs: number = 3000 // 5초 → 3초
 ): Promise<T[]> {
   return withRetry(async () => {
     return new Promise<T[]>((resolve, reject) => {
       const timeoutId = setTimeout(() => {
-        reject(new Error(`QUERY_TIMEOUT: ${timeoutMs}ms exceeded`));
+        const timeoutError = new Error(`QUERY_TIMEOUT: ${timeoutMs}ms exceeded`);
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Query timeout:', { query, timeoutMs });
+        }
+        reject(timeoutError);
       }, timeoutMs);
 
-      // 파라미터 정리 및 검증
+      // 파라미터 정리 및 검증 최적화
       const cleanParams = params.map(param => {
         if (param === undefined || param === null) return null;
         if (typeof param === 'object' && !Array.isArray(param)) {
           return JSON.stringify(param);
         }
+        if (typeof param === 'string') {
+          return param.trim();
+        }
         return param;
       });
+
+      // 로그 출력 최소화
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Executing query:', { query, params: cleanParams });
+      }
 
       pool.query(query, cleanParams)
         .then(([rows, fields]: [QueryResult, FieldPacket[]]) => {
           clearTimeout(timeoutId);
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Query result count:', Array.isArray(rows) ? rows.length : 0);
+          }
           resolve(rows as T[]);
         })
         .catch((error) => {
           clearTimeout(timeoutId);
-          console.error(`Query failed: ${query}`, { params: cleanParams, error: error.message });
+          console.error(`Query failed: ${query}`, { error: error.message });
           reject(error);
         });
     });
@@ -77,7 +103,7 @@ export async function executeQuery<T = any>(
 export async function executeMutation(
   query: string, 
   params: any[] = [], 
-  timeoutMs: number = 8000
+  timeoutMs: number = 5000 // 8초 → 5초
 ): Promise<[ResultSetHeader, FieldPacket[]]> {
   return withRetry(async () => {
     return new Promise<[ResultSetHeader, FieldPacket[]]>((resolve, reject) => {
@@ -101,14 +127,14 @@ export async function executeMutation(
         })
         .catch((error) => {
           clearTimeout(timeoutId);
-          console.error(`Mutation failed: ${query}`, { params: cleanParams, error: error.message });
+          console.error(`Mutation failed: ${query}`, { error: error.message });
           reject(error);
         });
     });
   });
 }
 
-// 트랜잭션 실행 함수
+// 트랜잭션 실행 함수 최적화
 export async function executeTransaction<T>(
   operations: (connection: any) => Promise<T>
 ): Promise<T> {
@@ -121,19 +147,21 @@ export async function executeTransaction<T>(
     return result;
   } catch (error: any) {
     await connection.rollback();
-    console.error('Transaction failed:', error);
+    if (process.env.NODE_ENV === 'development') {
+      console.error('Transaction failed:', error);
+    }
     throw error;
   } finally {
     connection.release();
   }
 }
 
-// 배치 INSERT 함수 (대량 데이터 처리용)
+// 배치 INSERT 함수 최적화
 export async function executeBatchInsert(
   tableName: string,
   columns: string[],
   values: any[][],
-  timeoutMs: number = 10000
+  timeoutMs: number = 8000 // 10초 → 8초
 ): Promise<void> {
   if (values.length === 0) return;
   
@@ -144,25 +172,35 @@ export async function executeBatchInsert(
   await executeMutation(query, flatParams, timeoutMs);
 }
 
-// 안전한 JSON 파싱 (향상된 버전)
+// 안전한 JSON 파싱 최적화
 export function parseJsonSafely(jsonString: any): any {
   if (!jsonString) return null;
   if (typeof jsonString === 'object') return jsonString;
   if (typeof jsonString !== 'string') return jsonString;
   
   try {
-    const parsed = JSON.parse(jsonString);
-    return parsed;
+    // 빈 문자열이거나 단순 문자열인 경우 처리
+    const trimmed = jsonString.trim();
+    if (!trimmed) return null;
+    
+    // JSON이 아닌 단순 문자열일 가능성 체크
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[') && !trimmed.startsWith('"')) {
+      return trimmed; // 단순 문자열로 반환
+    }
+    
+    return JSON.parse(trimmed);
   } catch (error: any) {
-    console.warn('JSON parsing failed:', { input: jsonString, error: error.message });
-    return jsonString; // 원본 반환
+    if (process.env.NODE_ENV === 'development') {
+      console.warn('JSON parsing failed:', { input: jsonString, error: error.message });
+    }
+    return jsonString; // 파싱 실패시 원본 반환
   }
 }
 
-// DB 연결 상태 확인
+// DB 연결 상태 확인 최적화
 export async function checkDatabaseConnection(): Promise<boolean> {
   try {
-    const result = await executeQuery("SELECT 1 as connected", [], 3000);
+    const result = await executeQuery("SELECT 1 as connected", [], 2000); // 3초 → 2초
     return Array.isArray(result) && result.length > 0;
   } catch (error) {
     console.error('Database connection check failed:', error);
@@ -170,11 +208,11 @@ export async function checkDatabaseConnection(): Promise<boolean> {
   }
 }
 
-// 쿼리 성능 모니터링 (개발 환경용)
+// 쿼리 성능 모니터링 최적화 (개발 환경 전용)
 export async function executeQueryWithMetrics<T = any>(
   query: string,
   params: any[] = [],
-  timeoutMs: number = 5000
+  timeoutMs: number = 3000 // 5초 → 3초
 ): Promise<{ data: T[], duration: number, query: string }> {
   const startTime = Date.now();
   
@@ -182,14 +220,55 @@ export async function executeQueryWithMetrics<T = any>(
     const data = await executeQuery<T>(query, params, timeoutMs);
     const duration = Date.now() - startTime;
     
-    if (process.env.NODE_ENV === 'development' && duration > 1000) {
-      console.warn(`Slow query detected (${duration}ms):`, query);
+    // 느린 쿼리 감지 조건 완화 (1초 → 2초)
+    if (process.env.NODE_ENV === 'development' && duration > 2000) {
+      console.warn(`⚠️ 느린 쿼리 감지 (${duration}ms):`, query);
     }
     
     return { data, duration, query };
   } catch (error: any) {
     const duration = Date.now() - startTime;
-    console.error(`Query failed after ${duration}ms:`, { query, params, error });
+    console.error(`Query failed after ${duration}ms:`, { query, error });
     throw error;
   }
-} 
+}
+
+// 캐시를 위한 간단한 메모리 저장소 (소규모 데이터용)
+const queryCache = new Map<string, { data: any, expiry: number }>();
+
+// 캐시된 쿼리 실행 (읽기 전용 데이터용)
+export async function executeQueryWithCache<T = any>(
+  query: string,
+  params: any[] = [],
+  cacheSeconds: number = 300, // 5분 캐시
+  timeoutMs: number = 3000
+): Promise<T[]> {
+  const cacheKey = `${query}_${JSON.stringify(params)}`;
+  const cached = queryCache.get(cacheKey);
+  
+  // 캐시 확인
+  if (cached && cached.expiry > Date.now()) {
+    return cached.data;
+  }
+  
+  // 캐시 미스 - DB 조회
+  const data = await executeQuery<T>(query, params, timeoutMs);
+  
+  // 캐시 저장
+  queryCache.set(cacheKey, {
+    data,
+    expiry: Date.now() + (cacheSeconds * 1000)
+  });
+  
+  return data;
+}
+
+// 캐시 정리 (메모리 누수 방지)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of queryCache.entries()) {
+    if (value.expiry < now) {
+      queryCache.delete(key);
+    }
+  }
+}, 60000); // 1분마다 정리 
