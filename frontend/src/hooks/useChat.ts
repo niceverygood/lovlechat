@@ -51,16 +51,21 @@ interface CacheEntry<T> {
   ttl: number;
 }
 
-// 통합 캐시 시스템 (더욱 최적화)
+// === 최적화된 설정 ===
 const chatCache = new Map<string, CacheEntry<any>>();
-const MAX_CACHE_SIZE = 30;
-const DEFAULT_TTL = 60000; // 1분 (더 빠른 업데이트)
+const MAX_CACHE_SIZE = 20; // 캐시 크기 축소
+const DEFAULT_TTL = 30000; // 30초로 단축 (빠른 업데이트)
+const REQUEST_TIMEOUT = 10000; // 10초 타임아웃
 
-// 진행 중인 요청 추적
+// 진행 중인 요청 추적 및 취소
 const activeRequests = new Map<string, Promise<any>>();
+const requestControllers = new Map<string, AbortController>();
 
 // 컴포넌트별 정리 추적
 const componentCleanupCallbacks = new Map<string, (() => void)[]>();
+
+// 디바운스 맵
+const debounceTimers = new Map<string, NodeJS.Timeout>();
 
 // 캐시 정리 인터벌
 let cacheCleanupInterval: NodeJS.Timeout | null = null;
@@ -96,20 +101,46 @@ function startCacheCleanup() {
     if (cleaned > 0) {
       console.log(`🧹 Chat cache cleaned: ${cleaned} items`);
     }
-  }, 2 * 60 * 1000); // 2분마다 정리
+  }, 60 * 1000); // 1분마다 정리
 }
 
 // 캐시 정리 시작
 startCacheCleanup();
 
-// 안전한 fetch 함수 (타임아웃 포함)
-async function safeFetch<T>(
+// === 디바운스 함수 ===
+function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  delay: number,
+  key: string
+): T {
+  return ((...args: any[]) => {
+    // 기존 타이머 제거
+    const existingTimer = debounceTimers.get(key);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+    
+    // 새 타이머 설정
+    const timer = setTimeout(() => {
+      func(...args);
+      debounceTimers.delete(key);
+    }, delay);
+    
+    debounceTimers.set(key, timer);
+  }) as T;
+}
+
+// === 최적화된 fetch 함수 ===
+async function optimizedFetch<T>(
   url: string, 
   options?: RequestInit,
-  timeout: number = 12000
+  timeout: number = REQUEST_TIMEOUT
 ): Promise<T> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
+  
+  // 요청 컨트롤러 저장
+  requestControllers.set(url, controller);
   
   try {
     const response = await fetch(url, {
@@ -133,20 +164,29 @@ async function safeFetch<T>(
     
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        throw new Error('Request timeout');
+        throw new Error('Request timeout or cancelled');
       }
       throw error;
     }
     throw new Error('Unknown fetch error');
+  } finally {
+    // 정리
+    requestControllers.delete(url);
   }
 }
 
-// 캐시된 요청 함수
+// === 최적화된 캐시 요청 함수 ===
 async function cachedRequest<T>(
   key: string,
   requestFn: () => Promise<T>,
-  ttl: number = DEFAULT_TTL
+  ttl: number = DEFAULT_TTL,
+  skipCache: boolean = false
 ): Promise<T> {
+  // 캐시 스킵 옵션
+  if (skipCache) {
+    return requestFn();
+  }
+  
   // 진행 중인 요청 확인
   if (activeRequests.has(key)) {
     return activeRequests.get(key) as Promise<T>;
@@ -172,9 +212,9 @@ async function cachedRequest<T>(
       return data;
     })
     .catch((error) => {
-      // 에러 시 stale cache 사용
+      // 에러 시 stale cache 사용 (더 오래된 캐시도 허용)
       if (cached) {
-        console.warn('Using stale cache due to error:', error.message);
+        console.warn('🔄 Using stale cache due to error:', error.message);
         return cached.data;
       }
       throw error;
@@ -193,6 +233,14 @@ export function useChat() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const componentId = useRef(`chat_${Date.now()}_${Math.random()}`);
+  const isUnmounted = useRef(false);
+
+  // === 안전한 상태 업데이트 ===
+  const safeSetState = useCallback((updater: () => void) => {
+    if (!isUnmounted.current) {
+      updater();
+    }
+  }, []);
 
   // 컴포넌트별 정리 함수 등록
   useEffect(() => {
@@ -200,7 +248,25 @@ export function useChat() {
     componentCleanupCallbacks.set(id, []);
     
     return () => {
-      // 컴포넌트 언마운트 시 정리
+      isUnmounted.current = true;
+      
+      // 진행 중인 요청 취소
+      for (const [url, controller] of Array.from(requestControllers.entries())) {
+        if (url.includes(id)) {
+          controller.abort();
+          requestControllers.delete(url);
+        }
+      }
+      
+      // 디바운스 타이머 정리
+      for (const [key, timer] of Array.from(debounceTimers.entries())) {
+        if (key.includes(id)) {
+          clearTimeout(timer);
+          debounceTimers.delete(key);
+        }
+      }
+      
+      // 컴포넌트별 정리
       const cleanupFns = componentCleanupCallbacks.get(id) || [];
       cleanupFns.forEach(fn => {
         try {
@@ -213,43 +279,51 @@ export function useChat() {
     };
   }, []);
 
-  // 메시지 로드 (최적화)
-  const loadMessages = useCallback(async (
-    characterId: number,
-    personaId: string
-  ): Promise<Msg[]> => {
-    const cacheKey = `messages_${characterId}_${personaId}`;
-    
-    return cachedRequest(cacheKey, async () => {
-      const response = await safeFetch<{messages: Msg[]}>(
-        `/api/chat/${characterId}?personaId=${personaId}`
-      );
-      return response.messages || [];
-    });
-  }, []);
+  // === 디바운스된 메시지 로드 ===
+  const loadMessages = useCallback(
+    debounce(async (
+      characterId: number,
+      personaId: string
+    ): Promise<Msg[]> => {
+      const cacheKey = `messages_${characterId}_${personaId}`;
+      
+      try {
+        return await cachedRequest(cacheKey, async () => {
+          const response = await optimizedFetch<{messages: Msg[]}>(
+            `/api/chat/${characterId}?personaId=${personaId}`
+          );
+          return response.messages || [];
+        });
+      } catch (error) {
+        console.error('💬 메시지 로드 실패:', error);
+        throw error;
+      }
+    }, 100, `loadMessages_${componentId.current}`),
+    []
+  );
 
-  // 캐릭터 정보 로드 (최적화)
+  // === 캐릭터 정보 로드 (긴 캐시) ===
   const loadCharacter = useCallback(async (characterId: number): Promise<Character> => {
     const cacheKey = `character_${characterId}`;
     
     return cachedRequest(cacheKey, async () => {
-      return safeFetch<Character>(`/api/character/${characterId}`);
-    }, 5 * 60 * 1000); // 5분 캐시
+      return optimizedFetch<Character>(`/api/character/${characterId}`);
+    }, 3 * 60 * 1000); // 3분 캐시 (캐릭터 정보는 변경이 적음)
   }, []);
 
-  // 메시지 전송 (최적화)
+  // === 메시지 전송 (최적화) ===
   const sendMessage = useCallback(async (
     characterId: number,
     personaId: string,
     message: string
   ): Promise<Msg | null> => {
-    if (!message.trim()) return null;
+    if (!message.trim() || loading) return null;
     
-    setLoading(true);
-    setError(null);
+    safeSetState(() => setLoading(true));
+    safeSetState(() => setError(null));
     
     try {
-      const response = await safeFetch<{newMessage: Msg}>(`/api/chat/${characterId}`, {
+      const response = await optimizedFetch<{newMessage: Msg}>(`/api/chat/${characterId}`, {
         method: 'POST',
         body: JSON.stringify({
           personaId,
@@ -264,23 +338,26 @@ export function useChat() {
       return response.newMessage;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to send message';
-      setError(errorMessage);
+      safeSetState(() => setError(errorMessage));
       throw error;
     } finally {
-      setLoading(false);
+      safeSetState(() => setLoading(false));
     }
-  }, []);
+  }, [loading, safeSetState]);
 
-  // 채팅 목록 로드 (최적화)
-  const loadChatList = useCallback(async (userId: string) => {
-    const cacheKey = `chatList_${userId}`;
-    
-    return cachedRequest(cacheKey, async () => {
-      return safeFetch<any[]>(`/api/chat/list?userId=${userId}`);
-    });
-  }, []);
+  // === 채팅 목록 로드 (디바운스) ===
+  const loadChatList = useCallback(
+    debounce(async (userId: string) => {
+      const cacheKey = `chatList_${userId}`;
+      
+      return cachedRequest(cacheKey, async () => {
+        return optimizedFetch<any[]>(`/api/chat/list?userId=${userId}`);
+      });
+    }, 150, `loadChatList_${componentId.current}`),
+    []
+  );
 
-  // 첫 대화 시작 (최적화)
+  // === 첫 대화 시작 ===
   const startFirstDate = useCallback(async (
     characterId: number,
     personaId: string
@@ -288,25 +365,33 @@ export function useChat() {
     const cacheKey = `firstDate_${characterId}_${personaId}`;
     
     return cachedRequest(cacheKey, async () => {
-      const response = await safeFetch<{firstDate: string}>(
+      const response = await optimizedFetch<{firstDate: string}>(
         `/api/chat/first-date?characterId=${characterId}&personaId=${personaId}`
       );
       return response.firstDate;
     });
   }, []);
 
-  // 병렬 데이터 로드 (최적화)
+  // === 병렬 데이터 로드 (최적화) ===
   const loadChatData = useCallback(async (
     characterId: number,
-    personaId: string
+    personaId: string,
+    forceRefresh: boolean = false
   ): Promise<{
     messages: Msg[];
     character: Character;
     firstDate: string;
   }> => {
     try {
-      setLoading(true);
-      setError(null);
+      safeSetState(() => setLoading(true));
+      safeSetState(() => setError(null));
+      
+      // 강제 새로고침인 경우 캐시 무효화
+      if (forceRefresh) {
+        chatCache.delete(`messages_${characterId}_${personaId}`);
+        chatCache.delete(`character_${characterId}`);
+        chatCache.delete(`firstDate_${characterId}_${personaId}`);
+      }
       
       // 병렬로 모든 데이터 로드
       const [messages, character, firstDate] = await Promise.allSettled([
@@ -322,17 +407,24 @@ export function useChat() {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to load chat data';
-      setError(errorMessage);
+      safeSetState(() => setError(errorMessage));
       throw error;
     } finally {
-      setLoading(false);
+      safeSetState(() => setLoading(false));
     }
-  }, [loadMessages, loadCharacter, startFirstDate]);
+  }, [loadMessages, loadCharacter, startFirstDate, safeSetState]);
 
-  // 캐시 관리
+  // === 캐시 관리 ===
   const clearCache = useCallback(() => {
     chatCache.clear();
     activeRequests.clear();
+    
+    // 진행 중인 요청 모두 취소
+    for (const controller of Array.from(requestControllers.values())) {
+      controller.abort();
+    }
+    requestControllers.clear();
+    
     console.log('🧹 Chat cache cleared');
   }, []);
 
@@ -340,7 +432,8 @@ export function useChat() {
     return {
       cacheSize: chatCache.size,
       activeRequests: activeRequests.size,
-      maxCacheSize: MAX_CACHE_SIZE
+      maxCacheSize: MAX_CACHE_SIZE,
+      requestControllers: requestControllers.size
     };
   }, []);
 
