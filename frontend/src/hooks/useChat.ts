@@ -2,287 +2,306 @@ import { useCallback, useEffect, useState, useRef } from "react";
 import { apiGet, apiPost, apiDelete, getApiUrl } from '../lib/openai';
 
 export interface Msg {
-  sender: "user" | "ai" | "system";
+  id: number;
   text: string;
-  avatar?: string;
+  sender: 'user' | 'ai';
   characterName?: string;
   characterProfileImg?: string;
   characterAge?: number;
   characterJob?: string;
-  name?: string;
-  age?: number | string;
-  job?: string;
-  timestamp?: string;
+  createdAt: string;
+  timestamp: string;
 }
 
-export interface ChatPagination {
+export interface Pagination {
   page: number;
   limit: number;
   total: number;
   hasMore: boolean;
 }
 
+interface Character {
+  id: number;
+  name: string;
+  profileImg?: string;
+  age?: number;
+  job?: string;
+  oneLiner?: string;
+  background?: string;
+  personality?: string;
+  habit?: string;
+  likes?: string;
+  dislikes?: string;
+  extraInfos?: any;
+  gender?: string;
+  scope?: string;
+  roomCode?: string;
+  category?: string;
+  tags?: string[];
+  attachments?: any;
+  firstScene?: string;
+  firstMessage?: string;
+  backgroundImg?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface FirstDateInfo {
+  firstDate: string | null;
+}
+
+interface ChatMessage {
+  id: number;
+  message: string;
+  sender: 'user' | 'ai';
+  characterName?: string;
+  characterProfileImg?: string;
+  characterAge?: number;
+  characterJob?: string;
+  createdAt: string;
+  timestamp: string;
+}
+
+interface ChatResponse {
+  messages: ChatMessage[];
+  favor: number;
+  pagination?: Pagination;
+}
+
+// 메모리 캐싱 (성능 최적화)
+const chatCache = new Map<string, { data: any; timestamp: number; ttl: number }>();
+const CACHE_TTL = 2 * 60 * 1000; // 2분 캐싱
+
+// 요청 디바운싱
+const requestQueue = new Map<string, Promise<any>>();
+
+// 캐시 정리 (메모리 누수 방지)
+setInterval(() => {
+  const now = Date.now();
+  const entries = Array.from(chatCache.entries());
+  for (const [key, value] of entries) {
+    if (now - value.timestamp > value.ttl) {
+      chatCache.delete(key);
+    }
+  }
+}, 60000); // 1분마다
+
+function createCacheKey(url: string, params?: Record<string, any>): string {
+  const paramStr = params ? new URLSearchParams(params).toString() : '';
+  return `${url}${paramStr ? '?' + paramStr : ''}`;
+}
+
+// 캐싱된 fetch 함수
+async function cachedFetch<T>(url: string, options?: RequestInit, ttl: number = CACHE_TTL): Promise<T> {
+  const cacheKey = createCacheKey(url);
+  const now = Date.now();
+  
+  // 캐시 확인
+  const cached = chatCache.get(cacheKey);
+  if (cached && (now - cached.timestamp) < cached.ttl) {
+    return cached.data;
+  }
+  
+  // 진행 중인 요청 확인 (중복 방지)
+  if (requestQueue.has(cacheKey)) {
+    return requestQueue.get(cacheKey);
+  }
+  
+  // 새 요청 생성
+  const requestPromise = fetch(url, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    },
+  }).then(async (response) => {
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data = await response.json();
+    
+    // 캐시 저장 (성공한 경우만)
+    if (data) {
+      chatCache.set(cacheKey, {
+        data,
+        timestamp: now,
+        ttl
+      });
+    }
+    
+    return data;
+  }).finally(() => {
+    requestQueue.delete(cacheKey);
+  });
+  
+  requestQueue.set(cacheKey, requestPromise);
+  return requestPromise;
+}
+
 export function useChat(
-  characterId: string, 
-  personaId: string, 
-  personaAvatar?: string, 
-  userId?: string,
-  consumeHearts?: (amount: number, description: string, relatedId?: string) => Promise<boolean>
+  characterId: string | null, 
+  personaId: string | null
 ) {
   const [messages, setMessages] = useState<Msg[]>([]);
-  const [input, setInput] = useState("");
+  const [favor, setFavor] = useState<number>(0);
   const [loading, setLoading] = useState(false);
-  const [favor, setFavor] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [pagination, setPagination] = useState<ChatPagination | null>(null);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [backgroundImageUrl] = useState<string>('');
   
   const abortControllerRef = useRef<AbortController | null>(null);
-  const lastParamsRef = useRef<string>('');
-  const isLoadingRef = useRef<boolean>(false);
+  const isLoadingRef = useRef(false);
+  const currentParamsRef = useRef<string | null>(null);
 
-  // 현재 채팅 파라미터 문자열 생성
-  const currentParams = `${characterId}_${personaId}`;
-
-  // 에러 상태 초기화
   const clearError = useCallback(() => {
     setError(null);
   }, []);
 
-  // 메시지 불러오기 (대폭 최적화)
+  const getApiUrl = useCallback(() => {
+    return process.env.REACT_APP_API_URL || 'http://localhost:3002';
+  }, []);
+
+  // 최적화된 메시지 로딩
   const loadMessages = useCallback(async () => {
     if (!characterId || !personaId) return;
     
-    // 중복 호출 방지 (강화)
-    if (isLoadingRef.current || (lastParamsRef.current === currentParams && hasLoaded)) {
+    const currentParams = `${characterId}-${personaId}`;
+    
+    // 중복 요청 방지
+    if (isLoadingRef.current || currentParamsRef.current === currentParams) {
       return;
     }
-    
+
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
+    abortControllerRef.current = new AbortController();
     isLoadingRef.current = true;
-    
-    try {
-      setLoading(true);
-      clearError();
-      
-      // 기존 요청 취소
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-      }
-      
-      const controller = new AbortController();
-      abortControllerRef.current = controller;
-      
-      console.log('📨 메시지 로딩:', { characterId, personaId });
-      
-      const endpoint = `/api/chat/${characterId}?personaId=${personaId}`;
-      const data = await apiGet(endpoint, true); // 캐싱 활성화
-      
-      if (controller.signal.aborted) return;
-      
-      if (data.ok || data.messages) {
-        const formattedMessages = (data.messages || []).map((msg: any) => ({
-          sender: msg.sender,
-          text: msg.message,
-          characterName: msg.characterName,
-          characterProfileImg: msg.characterProfileImg,
-          characterAge: msg.characterAge,
-          characterJob: msg.characterJob,
-          timestamp: msg.timestamp || msg.createdAt
-        }));
-        
-        setMessages(formattedMessages);
-        
-        if (typeof data.favor === 'number') {
-          setFavor(data.favor);
-        }
-        
-        if (data.pagination) {
-          setPagination(data.pagination);
-        }
-        
-        lastParamsRef.current = currentParams;
-        setHasLoaded(true);
-        
-        if (data.fallback) {
-          console.warn("⚠️ 폴백 데이터 사용");
-        }
-      } else {
-        throw new Error(data.error || "메시지를 불러올 수 없습니다.");
-      }
-    } catch (err: any) {
-      if (err.name === 'AbortError') return;
-      
-      console.error("❌ 메시지 로드 에러:", err.message);
-      
-      // 네트워크 에러 시 사용자 친화적 메시지
-      let errorMessage = err.message;
-      if (err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError')) {
-        errorMessage = "네트워크 연결을 확인해주세요.";
-      } else if (err.message?.includes('timeout')) {
-        errorMessage = "서버 응답이 느립니다. 새로고침 해주세요.";
-      }
-      
-      setError(errorMessage);
-      setMessages([]);
-    } finally {
-      setLoading(false);
-      isLoadingRef.current = false;
-    }
-  }, [characterId, personaId, clearError, currentParams, hasLoaded]);
-
-  // 컴포넌트 마운트 시 또는 파라미터 변경 시 메시지 로드 (최적화)
-  useEffect(() => {
-    if (!characterId || !personaId) return;
-    
-    // 파라미터가 변경된 경우에만 새로 로드
-    if (lastParamsRef.current !== currentParams) {
-      setHasLoaded(false);
-      setMessages([]);
-      setPagination(null);
-      setFavor(0);
-      clearError();
-      isLoadingRef.current = false;
-    }
-    
-    // 약간의 디바운싱 적용
-    const timeoutId = setTimeout(() => {
-      loadMessages();
-    }, 50);
-    
-    // 컴포넌트 언마운트 시 요청 취소
-    return () => {
-      clearTimeout(timeoutId);
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort();
-        abortControllerRef.current = null;
-      }
-      isLoadingRef.current = false;
-    };
-  }, [characterId, personaId, loadMessages]);
-
-  // 메시지 전송 (최적화됨)
-  const sendMessage = useCallback(async (message: string) => {
-    if (!message.trim() || loading || isLoadingRef.current) return;
-    
-    const messageText = message.trim();
-    
-    // 하트 사용 체크 (게스트 모드 제외)
-    if (consumeHearts && userId && personaId !== 'guest') {
-      const heartUsed = await consumeHearts(10, `${personaId}와 ${characterId} 대화`, `${personaId}_${characterId}`);
-      if (!heartUsed) {
-        setError("하트가 부족합니다. 하트샵에서 충전해주세요.");
-        return;
-      }
-    }
-    
-    setInput("");
+    currentParamsRef.current = currentParams;
     setLoading(true);
     clearError();
-    
-    // 사용자 메시지 즉시 표시
-    const userMessage: Msg = {
-      sender: "user",
-      text: messageText,
-      avatar: personaAvatar,
-      timestamp: new Date().toISOString()
-    };
-    
-    setMessages(prev => [...prev, userMessage]);
-    
-    try {
-      console.log('💬 메시지 전송:', messageText);
-      
-      const data = await apiPost('/api/chat', {
-        characterId,
-        personaId,
-        message: messageText,
-        sender: "user",
-        userId: personaId === 'guest' ? null : userId
-      });
 
-      if (data.ok && data.aiText) {
-        const aiMessage: Msg = {
-          sender: "ai",
-          text: data.aiText,
-          timestamp: data.timestamp || new Date().toISOString()
-        };
-        
-        setMessages(prev => [...prev, aiMessage]);
-        
-        // 호감도 업데이트
-        if (data.favorDelta && data.favorDelta !== 0) {
-          setFavor(prev => Math.max(0, Math.min(100, prev + data.favorDelta)));
-        }
-        
-        console.log("✅ 메시지 전송 성공");
-      } else {
-        throw new Error(data.error || "AI 응답 생성에 실패했습니다.");
+    try {
+      const API_BASE = getApiUrl();
+      
+      // 캐싱된 fetch 사용
+      const response = await cachedFetch<ChatResponse>(
+        `${API_BASE}/api/chat/${characterId}?personaId=${personaId}`,
+        { signal: abortControllerRef.current.signal },
+        CACHE_TTL
+      );
+
+      if (response && response.messages) {
+        // 메시지 데이터 변환 (기존 Msg 인터페이스에 맞게)
+        const transformedMessages: Msg[] = response.messages.map((msg: ChatMessage) => ({
+          id: msg.id,
+          text: msg.message || '',
+          sender: msg.sender as 'user' | 'ai',
+          characterName: msg.characterName || '',
+          characterProfileImg: msg.characterProfileImg || '',
+          characterAge: msg.characterAge || 0,
+          characterJob: msg.characterJob || '',
+          createdAt: msg.createdAt,
+          timestamp: msg.timestamp
+        }));
+
+        setMessages(transformedMessages);
+        setFavor(response.favor || 0);
+        setPagination(response.pagination || null);
+        setHasLoaded(true);
       }
     } catch (err: any) {
-      console.error("❌ 메시지 전송 실패:", err.message);
-      
-      // 실패한 사용자 메시지 제거
-      setMessages(prev => prev.slice(0, -1));
-      
-      // 에러 메시지 표시
-      const errorMessage: Msg = {
-        sender: "system",
-        text: `메시지 전송 실패: ${err.message || '알 수 없는 오류'}. 다시 시도해주세요.`
-      };
-      
-      setMessages(prev => [...prev, errorMessage]);
-      setError(err.message || "메시지 전송에 실패했습니다.");
+      if (err.name !== 'AbortError') {
+        console.error('메시지 로딩 에러:', err);
+        setError(err.message || '메시지를 불러오는 중 오류가 발생했습니다.');
+      }
     } finally {
       setLoading(false);
+      isLoadingRef.current = false;
     }
-  }, [characterId, personaId, loading, clearError, personaAvatar, consumeHearts, userId]);
+  }, [characterId, personaId, clearError, getApiUrl]);
 
-  // 채팅 내역 삭제
-  const clearChat = useCallback(async () => {
-    if (!window.confirm("모든 채팅 내역을 삭제하시겠습니까?")) return;
-    
+  // 메시지 전송 (최적화)
+  const sendMessage = useCallback(async (messageText: string): Promise<boolean> => {
+    if (!characterId || !personaId || !messageText.trim()) {
+      return false;
+    }
+
     try {
-      clearError();
-      await apiDelete(`/api/chat?personaId=${personaId}&characterId=${characterId}`);
+      const API_BASE = getApiUrl();
       
-      setMessages([]);
-      setFavor(0);
-      setPagination(null);
-      console.log("🗑️ 채팅 내역 삭제 완료");
-    } catch (err: any) {
-      console.error("❌ 채팅 삭제 에러:", err.message);
-      setError("채팅 삭제에 실패했습니다.");
-    }
-  }, [personaId, characterId, clearError]);
+      const response = await fetch(`${API_BASE}/api/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          personaId,
+          characterId: parseInt(characterId),
+          message: messageText.trim(),
+        }),
+      });
 
-  // 메시지 새로고침
-  const refreshMessages = useCallback(() => {
-    lastParamsRef.current = '';
-    setHasLoaded(false);
-    setMessages([]);
-    setPagination(null);
-    setFavor(0);
-    clearError();
-    isLoadingRef.current = false;
-    loadMessages();
-  }, [clearError, loadMessages]);
+      if (!response.ok) {
+        throw new Error(`메시지 전송 실패: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        // 캐시 무효화 (새 메시지로 인해)
+        const chatCacheKey = createCacheKey(`${API_BASE}/api/chat/${characterId}?personaId=${personaId}`);
+        chatCache.delete(chatCacheKey);
+        
+        // 메시지 목록 새로고침
+        await loadMessages();
+        return true;
+      } else {
+        throw new Error(result.message || '메시지 전송에 실패했습니다.');
+      }
+
+    } catch (err: any) {
+      console.error('메시지 전송 에러:', err);
+      setError(err.message || '메시지 전송 중 오류가 발생했습니다.');
+      return false;
+    }
+  }, [characterId, personaId, getApiUrl, loadMessages]);
+
+  // 최적화된 useEffect (중복 호출 방지)
+  useEffect(() => {
+    const currentParams = `${characterId}-${personaId}`;
+    
+    // 파라미터가 변경된 경우에만 로드
+    if (currentParams !== currentParamsRef.current) {
+      loadMessages();
+    }
+  }, [characterId, personaId, loadMessages]);
+
+  // 정리 함수
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      isLoadingRef.current = false;
+      currentParamsRef.current = null;
+    };
+  }, []);
 
   return {
     messages,
-    input,
-    setInput,
-    sendMessage,
-    loading,
     favor,
+    loading,
     error,
-    pagination,
+    sendMessage,
     clearError,
-    clearChat,
-    refreshMessages,
-    hasError: !!error,
+    hasLoaded,
+    pagination,
     canLoadMore: pagination?.hasMore || false,
     backgroundImageUrl,
-    apiUrl: getApiUrl()
+    apiUrl: getApiUrl(),
+    refreshData: loadMessages
   };
 }

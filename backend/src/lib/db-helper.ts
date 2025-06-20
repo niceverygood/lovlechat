@@ -1,4 +1,4 @@
-import { pool, warmupConnection } from './db';
+import { getPool } from './db';
 import { FieldPacket, QueryResult, ResultSetHeader, RowDataPacket } from 'mysql2';
 
 // 환경별 설정
@@ -6,28 +6,22 @@ const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefi
 const isProduction = process.env.NODE_ENV === 'production';
 
 // Vercel 최적화된 타임아웃 설정
-const QUERY_TIMEOUT = isVercel ? 25000 : 10000; // Vercel: 25초, 로컬: 10초
-const MUTATION_TIMEOUT = isVercel ? 30000 : 15000;
-const MAX_RETRIES = isVercel ? 2 : 3;
+const QUERY_TIMEOUT = isVercel ? 20000 : 8000; // 대폭 단축
+const MUTATION_TIMEOUT = isVercel ? 25000 : 12000;
+const MAX_RETRIES = isVercel ? 1 : 2; // 재시도 최소화
 
-// 강화된 캐싱 시스템
+// 강화된 캐싱 시스템 (메모리 최적화)
 const queryCache = new Map<string, { data: any; timestamp: number; ttl: number }>();
-const CACHE_CLEANUP_INTERVAL = 5 * 60 * 1000; // 5분마다 정리
-const MAX_CACHE_SIZE = isVercel ? 50 : 100; // 캐시 크기 제한
+const CACHE_CLEANUP_INTERVAL = 3 * 60 * 1000; // 3분마다 정리
+const MAX_CACHE_SIZE = isVercel ? 30 : 60; // 캐시 크기 제한
 
-// Vercel 웜업
-if (isVercel) {
-  warmupConnection().catch(console.warn);
-}
-
-// 재시도 헬퍼
+// 최적화된 재시도 헬퍼
 async function withRetry<T>(operation: () => Promise<T>, retries = MAX_RETRIES): Promise<T> {
   try {
     return await operation();
   } catch (error: any) {
     if (retries > 0 && shouldRetry(error)) {
-      if (isVercel) console.log(`🔄 재시도... ${retries}회 남음`);
-      await sleep(Math.min(1000 * (MAX_RETRIES - retries + 1), 3000));
+      await sleep(500); // 짧은 대기
       return withRetry(operation, retries - 1);
     }
     throw error;
@@ -35,17 +29,16 @@ async function withRetry<T>(operation: () => Promise<T>, retries = MAX_RETRIES):
 }
 
 function shouldRetry(error: any): boolean {
-  const retryableCodes = ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'ER_LOCK_WAIT_TIMEOUT'];
+  const retryableCodes = ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED'];
   return retryableCodes.includes(error.code) || 
-         error.message?.includes('TIMEOUT') ||
-         error.message?.includes('Connection lost');
+         error.message?.includes('TIMEOUT');
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// 캐시 정리 (백그라운드)
+// 최적화된 캐시 정리
 setInterval(() => {
   const now = Date.now();
   let cleaned = 0;
@@ -57,7 +50,7 @@ setInterval(() => {
     }
   }
   
-  // 크기 제한 초과 시 오래된 항목 제거
+  // 크기 제한 초과 시 오래된 항목 제거 (LRU)
   if (queryCache.size > MAX_CACHE_SIZE) {
     const sortedEntries = Array.from(queryCache.entries())
       .sort((a, b) => a[1].timestamp - b[1].timestamp);
@@ -74,43 +67,47 @@ setInterval(() => {
   }
 }, CACHE_CLEANUP_INTERVAL);
 
-// 캐시 키 생성
+// 캐시 키 생성 (최적화)
 function createCacheKey(query: string, params: any[]): string {
-  return `${query}|${JSON.stringify(params)}`;
+  const normalizedQuery = query.replace(/\s+/g, ' ').trim();
+  return `${normalizedQuery}|${JSON.stringify(params)}`;
 }
 
-// 기본 쿼리 실행 (최적화)
+// 쿼리 로깅 최적화 (문자 잘림 방지)
+function logQuery(query: string, params: any[] = []) {
+  if (!isProduction) {
+    const cleanQuery = query.replace(/\s+/g, ' ').trim();
+    console.log('🔍 Executing query:', { 
+      query: cleanQuery, 
+      params: params.slice(0, 3) // 파라미터 제한
+    });
+  }
+}
+
+// 기본 쿼리 실행 (대폭 최적화)
 export async function executeQuery(query: string, params: any[] = []): Promise<any[]> {
   const startTime = Date.now();
   
-  try {
-    console.log('🔍 Executing query:', { 
-      query: query.replace(/\s+/g, ' ').trim(),
-      params 
-    });
+  return withRetry(async () => {
+    logQuery(query, params);
     
+    const pool = await getPool();
     const [rows] = await pool.execute(query, params) as [RowDataPacket[], any];
     const executionTime = Date.now() - startTime;
     
-    console.log(`✅ Query result count: ${Array.isArray(rows) ? rows.length : 0} (${executionTime}ms)`);
-    return Array.isArray(rows) ? rows : [];
+    if (!isProduction) {
+      console.log(`✅ Query result count: ${Array.isArray(rows) ? rows.length : 0}`);
+    }
     
-  } catch (error: any) {
-    const executionTime = Date.now() - startTime;
-    console.error(`❌ Query execution failed (${executionTime}ms):`, {
-      error: error.message,
-      query: query.substring(0, 100),
-      params: params.slice(0, 5)
-    });
-    throw error;
-  }
+    return Array.isArray(rows) ? rows : [];
+  });
 }
 
 // 캐싱이 적용된 쿼리 실행 (강화)
 export async function executeQueryWithCache(
   query: string, 
   params: any[] = [], 
-  ttlSeconds: number = 180 // 기본 3분
+  ttlSeconds: number = 300 // 기본 5분으로 증가
 ): Promise<any[]> {
   const cacheKey = createCacheKey(query, params);
   const now = Date.now();
@@ -119,7 +116,9 @@ export async function executeQueryWithCache(
   // 캐시 확인
   const cached = queryCache.get(cacheKey);
   if (cached && (now - cached.timestamp) < cached.ttl) {
-    console.log(`⚡ Cache hit: ${query.substring(0, 50)}... (${cached.data.length} rows)`);
+    if (!isProduction) {
+      console.log(`⚡ Cache hit: ${cached.data.length} rows`);
+    }
     return cached.data;
   }
   
@@ -134,35 +133,33 @@ export async function executeQueryWithCache(
       ttl: ttlMs
     });
     
-    console.log(`💾 Cached query result: ${result.length} rows for ${ttlSeconds}s`);
+    if (!isProduction) {
+      console.log(`💾 Cached query result: ${result.length} rows for ${ttlSeconds}s`);
+    }
+    
     return result;
     
   } catch (error) {
-    // 에러 발생 시 캐시된 데이터가 있다면 사용 (stale-while-revalidate)
+    // 에러 발생 시 캐시된 데이터가 있다면 사용 (Stale-While-Revalidate)
     if (cached) {
-      console.warn(`⚠️ Using stale cache due to error: ${error}`);
+      console.warn(`⚠️ Using stale cache due to error`);
       return cached.data;
     }
     throw error;
   }
 }
 
-// 변경 쿼리 실행 (INSERT, UPDATE, DELETE)
+// 변경 쿼리 실행 (INSERT, UPDATE, DELETE) 최적화
 export async function executeMutation(query: string, params: any[] = []): Promise<{ 
   affectedRows: number; 
   insertId?: number;
   success: boolean;
 }> {
-  const startTime = Date.now();
-  
-  try {
-    console.log('🔄 Executing mutation:', { 
-      query: query.replace(/\s+/g, ' ').trim(),
-      params 
-    });
+  return withRetry(async () => {
+    logQuery(query, params);
     
+    const pool = await getPool();
     const [result] = await pool.execute(query, params) as [ResultSetHeader, any];
-    const executionTime = Date.now() - startTime;
     
     // 관련 캐시 무효화 (테이블명 기준)
     const tableName = extractTableName(query);
@@ -170,47 +167,37 @@ export async function executeMutation(query: string, params: any[] = []): Promis
       invalidateTableCache(tableName);
     }
     
-    console.log(`✅ Mutation completed: ${result.affectedRows} rows affected (${executionTime}ms)`);
+    if (!isProduction) {
+      console.log(`✅ Mutation completed: ${result.affectedRows} rows affected`);
+    }
     
     return {
       affectedRows: result.affectedRows || 0,
       insertId: result.insertId,
       success: true
     };
-    
-  } catch (error: any) {
-    const executionTime = Date.now() - startTime;
-    console.error(`❌ Mutation failed (${executionTime}ms):`, {
-      error: error.message,
-      query: query.substring(0, 100),
-      params: params.slice(0, 5)
-    });
-    
-    return {
-      affectedRows: 0,
-      success: false
-    };
-  }
+  });
 }
 
-// 테이블명 추출
+// 테이블명 추출 최적화
 function extractTableName(query: string): string | null {
   const match = query.match(/(?:INSERT INTO|UPDATE|DELETE FROM)\s+`?(\w+)`?/i);
   return match ? match[1] : null;
 }
 
-// 테이블별 캐시 무효화
+// 테이블별 캐시 무효화 (성능 최적화)
 function invalidateTableCache(tableName: string): void {
   let invalidated = 0;
+  const lowerTable = tableName.toLowerCase();
   
   for (const [key, _] of queryCache.entries()) {
-    if (key.toLowerCase().includes(tableName.toLowerCase())) {
+    if (key.toLowerCase().includes(lowerTable)) {
       queryCache.delete(key);
       invalidated++;
     }
   }
   
-  if (invalidated > 0) {
+  if (invalidated > 0 && !isProduction) {
     console.log(`🗑️ Invalidated ${invalidated} cache entries for table: ${tableName}`);
   }
 }
@@ -220,18 +207,17 @@ export async function executeTransaction(operations: Array<{
   query: string;
   params: any[];
 }>): Promise<boolean> {
+  const pool = await getPool();
   const connection = await pool.getConnection();
   
   try {
     await connection.beginTransaction();
-    console.log('🔄 Transaction started');
     
     for (const { query, params } of operations) {
       await connection.execute(query, params);
     }
     
     await connection.commit();
-    console.log('✅ Transaction completed successfully');
     
     // 관련 캐시 무효화
     for (const { query } of operations) {
@@ -250,94 +236,6 @@ export async function executeTransaction(operations: Array<{
     
   } finally {
     connection.release();
-  }
-}
-
-// 캐시 통계 및 관리
-export function getCacheStats() {
-  return {
-    size: queryCache.size,
-    maxSize: MAX_CACHE_SIZE,
-    entries: Array.from(queryCache.entries()).map(([key, value]) => ({
-      key: key.substring(0, 50),
-      age: Date.now() - value.timestamp,
-      ttl: value.ttl
-    }))
-  };
-}
-
-// 캐시 초기화
-export function clearCache(): void {
-  const size = queryCache.size;
-  queryCache.clear();
-  console.log(`🧹 Cache cleared: ${size} entries removed`);
-}
-
-// 헬스 체크
-export async function healthCheck(): Promise<{ 
-  database: boolean; 
-  cache: boolean; 
-  performance: string;
-}> {
-  const startTime = Date.now();
-  
-  try {
-    await executeQuery('SELECT 1 as test');
-    const responseTime = Date.now() - startTime;
-    
-    let performance = 'excellent';
-    if (responseTime > 100) performance = 'good';
-    if (responseTime > 300) performance = 'slow';
-    if (responseTime > 1000) performance = 'poor';
-    
-    return {
-      database: true,
-      cache: queryCache.size > 0,
-      performance: `${performance} (${responseTime}ms)`
-    };
-    
-  } catch (error) {
-    return {
-      database: false,
-      cache: false,
-      performance: 'error'
-    };
-  }
-}
-
-// 연결 상태 확인
-export async function checkDatabaseConnection(): Promise<boolean> {
-  try {
-    await executeQuery("SELECT 1 as connected");
-    return true;
-  } catch (error: any) {
-    console.error('❌ DB connection check failed:', error.message);
-    return false;
-  }
-}
-
-// 성능 모니터링 (개발용)
-export async function executeQueryWithMetrics(
-  query: string,
-  params: any[] = []
-): Promise<{ data: any[], duration: number }> {
-  const startTime = Date.now();
-  
-  try {
-    const data = await executeQuery(query, params);
-    const duration = Date.now() - startTime;
-    
-    // 느린 쿼리 경고
-    const slowThreshold = isVercel ? 5000 : 2000;
-    if (duration > slowThreshold) {
-      console.warn(`⚠️ 느린 쿼리 (${duration}ms):`, query.substring(0, 50));
-    }
-    
-    return { data, duration };
-  } catch (error: any) {
-    const duration = Date.now() - startTime;
-    console.error(`❌ Query failed after ${duration}ms:`, error.message);
-    throw error;
   }
 }
 
@@ -363,20 +261,65 @@ export function parseJsonSafely(jsonString: any): any {
   if (typeof jsonString !== 'string') return jsonString;
   
   try {
-    // 빈 문자열이거나 단순 문자열인 경우 처리
     const trimmed = jsonString.trim();
     if (!trimmed) return null;
     
     // JSON이 아닌 단순 문자열일 가능성 체크
     if (!trimmed.startsWith('{') && !trimmed.startsWith('[') && !trimmed.startsWith('"')) {
-      return trimmed; // 단순 문자열로 반환
+      return trimmed;
     }
     
     return JSON.parse(trimmed);
   } catch (error: any) {
-    if (process.env.NODE_ENV === 'development' || isVercel) {
-      console.warn('⚠️ JSON parsing failed:', { input: jsonString, error: error.message });
-    }
-    return jsonString; // 파싱 실패시 원본 반환
+    return jsonString;
   }
+}
+
+// 헬스 체크 최적화
+export async function healthCheck(): Promise<{ 
+  database: boolean; 
+  cache: boolean; 
+  performance: string;
+}> {
+  const startTime = Date.now();
+  
+  try {
+    await executeQuery('SELECT 1 as test');
+    const responseTime = Date.now() - startTime;
+    
+    let performance = 'excellent';
+    if (responseTime > 50) performance = 'good';
+    if (responseTime > 150) performance = 'slow';
+    if (responseTime > 500) performance = 'poor';
+    
+    return {
+      database: true,
+      cache: queryCache.size > 0,
+      performance: `${performance} (${responseTime}ms)`
+    };
+    
+  } catch (error) {
+    return {
+      database: false,
+      cache: false,
+      performance: 'error'
+    };
+  }
+}
+
+// 캐시 통계
+export function getCacheStats() {
+  return {
+    size: queryCache.size,
+    maxSize: MAX_CACHE_SIZE,
+    hitRate: '계산 중...', // 추후 구현
+    environment: isVercel ? 'vercel' : 'local'
+  };
+}
+
+// 캐시 초기화
+export function clearCache(): void {
+  const size = queryCache.size;
+  queryCache.clear();
+  console.log(`🧹 Cache cleared: ${size} entries removed`);
 } 
