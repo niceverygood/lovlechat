@@ -14,6 +14,8 @@ interface ChatState {
   messages: Message[];
   loading: boolean;
   error: string | null;
+  favor: number;
+  backgroundImageUrl?: string;
 }
 
 interface Character {
@@ -146,11 +148,19 @@ const ultraDebounce = (func: Function, delay: number, key: string) => {
   debounceTimers.set(key, timer);
 };
 
-export function useChat() {
+export function useChat(
+  characterId?: string,
+  personaId?: string,
+  personaAvatar?: string,
+  userId?: string,
+  heartsFunction?: any
+) {
   const [state, setState] = useState<ChatState>({
     messages: [],
     loading: false,
     error: null,
+    favor: 0,
+    backgroundImageUrl: undefined
   });
   
   const isUnmountedRef = useRef(false);
@@ -170,12 +180,47 @@ export function useChat() {
     return ultraFetch(`/character/${characterId}`);
   }, []);
   
+  // === 🚀 초고속 메시지 로드 ===
+  const loadMessages = useCallback((characterId: number | string, personaId: string) => {
+    const debounceKey = `load_${characterId}_${personaId}`;
+    
+    ultraDebounce(async () => {
+      if (isUnmountedRef.current) return;
+      
+      setState(prev => ({ ...prev, loading: true, error: null }));
+      
+      try {
+        const data = await ultraFetch(`/chat/${characterId}?personaId=${personaId}`);
+        
+        if (!isUnmountedRef.current) {
+          setState(prev => ({
+            ...prev,
+            messages: data.messages || [],
+            favor: data.favor || 0,
+            backgroundImageUrl: data.backgroundImageUrl || data.character?.backgroundImg,
+            loading: false
+          }));
+        }
+        
+        return data;
+        
+      } catch (error: any) {
+        if (!isUnmountedRef.current) {
+          setState(prev => ({
+            ...prev,
+            loading: false,
+            error: '메시지 로드 실패'
+          }));
+        }
+        throw error;
+      }
+    }, DEBOUNCE_DELAY, debounceKey);
+  }, []);
+  
   // === 🚀 초고속 메시지 전송 ===
-  const sendMessage = useCallback((
-    characterId: number, 
-    personaId: string, 
-    message: string
-  ) => {
+  const sendMessage = useCallback((message: string) => {
+    if (!characterId || !personaId) return;
+    
     const debounceKey = `send_${characterId}_${personaId}`;
     
     ultraDebounce(async () => {
@@ -193,6 +238,8 @@ export function useChat() {
           setState(prev => ({
             ...prev,
             messages: data.messages || [],
+            favor: data.favor || prev.favor,
+            backgroundImageUrl: data.backgroundImageUrl || prev.backgroundImageUrl,
             loading: false
           }));
         }
@@ -217,42 +264,14 @@ export function useChat() {
         throw error;
       }
     }, DEBOUNCE_DELAY, debounceKey);
-  }, []);
+  }, [characterId, personaId]);
   
-  // === 🚀 초고속 메시지 로드 ===
-  const loadMessages = useCallback((characterId: number, personaId: string) => {
-    const debounceKey = `load_${characterId}_${personaId}`;
-    
-    ultraDebounce(async () => {
-      if (isUnmountedRef.current) return;
-      
-      setState(prev => ({ ...prev, loading: true, error: null }));
-      
-      try {
-        const data = await ultraFetch(`/chat/${characterId}?personaId=${personaId}`);
-        
-        if (!isUnmountedRef.current) {
-          setState(prev => ({
-            ...prev,
-            messages: data.messages || [],
-            loading: false
-          }));
-        }
-        
-        return data;
-        
-      } catch (error: any) {
-        if (!isUnmountedRef.current) {
-          setState(prev => ({
-            ...prev,
-            loading: false,
-            error: '메시지 로드 실패'
-          }));
-        }
-        throw error;
-      }
-    }, DEBOUNCE_DELAY, debounceKey);
-  }, []);
+  // === 초기 데이터 로드 ===
+  useEffect(() => {
+    if (characterId && personaId && characterId.trim() && personaId.trim()) {
+      loadMessages(characterId, personaId);
+    }
+  }, [characterId, personaId, loadMessages]);
   
   // === 🚀 초고속 채팅 목록 ===
   const loadChatList = useCallback(async (userId: string): Promise<ChatListItem[]> => {
@@ -294,6 +313,8 @@ export function useChat() {
     messages: state.messages,
     loading: state.loading,
     error: state.error,
+    favor: state.favor,
+    backgroundImageUrl: state.backgroundImageUrl,
     
     // Actions
     sendMessage,
