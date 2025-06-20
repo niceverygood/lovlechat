@@ -1,12 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
-import { executeQuery } from "@/lib/db-helper";
+import { NextRequest } from "next/server";
+import { executeQueryWithCache } from "@/lib/db-helper";
+import { successResponse, errorResponse, optionsResponse } from "@/lib/cors";
 
-// CORS 헤더 공통 설정
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, cache-control, x-requested-with',
-};
+// 환경별 설정
+const isVercel = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
+const CACHE_DURATION = isVercel ? 120 : 60; // 2분/1분 캐싱
+const MAX_CHATS = isVercel ? 20 : 50; // Vercel에서는 더 적게
 
 export async function GET(req: NextRequest) {
   const searchParams = req.nextUrl.searchParams;
@@ -14,13 +13,7 @@ export async function GET(req: NextRequest) {
   
   // userId 필수 검증
   if (!userId) {
-    return NextResponse.json(
-      { ok: false, error: 'userId is required' },
-      { 
-        status: 400,
-        headers: CORS_HEADERS
-      }
-    );
+    return errorResponse('userId is required', 400);
   }
 
   // 더미 채팅 데이터 (DB 연결 실패시 폴백용)
@@ -38,9 +31,9 @@ export async function GET(req: NextRequest) {
     }
   ];
 
-    try {
-    // 직접 JOIN을 사용하여 사용자의 채팅 리스트를 가져옴
-    const rows = await executeQuery(
+  try {
+    // 최적화된 채팅 리스트 쿼리 (캐시 적용)
+    const rows = await executeQueryWithCache(
       `SELECT 
          c1.characterId, 
          c1.personaId, 
@@ -67,28 +60,25 @@ export async function GET(req: NextRequest) {
        JOIN personas p ON c1.personaId = p.id
        JOIN character_profiles cp ON c1.characterId = cp.id
        ORDER BY c1.createdAt DESC 
-       LIMIT 50`,
-      [userId]
+       LIMIT ?`,
+      [userId, MAX_CHATS],
+      CACHE_DURATION
     );
     
-    return NextResponse.json({ ok: true, chats: rows }, {
-      headers: CORS_HEADERS
-    });
-  } catch (err) {
-    console.error("DB error:", err);
+    return successResponse({ chats: rows || [] });
     
-    // DB 에러시 항상 폴백 데이터 반환
-    return NextResponse.json({ ok: true, chats: fallbackChats, fallback: true }, {
-      headers: CORS_HEADERS
+  } catch (err: any) {
+    console.error("Chat list error:", err.message);
+    
+    // DB 에러시 폴백 데이터 반환
+    return successResponse({ 
+      chats: fallbackChats, 
+      fallback: true,
+      message: "채팅 목록을 불러올 수 없습니다."
     });
   }
 }
 
 export async function OPTIONS() {
-  return NextResponse.json(
-    {},
-    {
-      headers: CORS_HEADERS,
-      }
-  );
+  return optionsResponse();
 } 
