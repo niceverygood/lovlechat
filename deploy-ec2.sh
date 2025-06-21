@@ -1,0 +1,230 @@
+#!/bin/bash
+
+# 🚀 LovleChat EC2 배포 스크립트
+# 사용법: ./deploy-ec2.sh [EC2_IP] [KEY_PATH]
+
+set -e  # 에러 발생시 스크립트 중단
+
+# 색상 정의
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# 변수 설정
+EC2_IP=${1:-"your-ec2-ip"}
+KEY_PATH=${2:-"~/.ssh/lovlechat-key.pem"}
+DEPLOY_USER="ubuntu"
+APP_DIR="/home/ubuntu/lovlechat"
+REPO_URL="https://github.com/your-username/LovleChat.git"
+
+echo -e "${BLUE}🚀 LovleChat EC2 배포 시작${NC}"
+echo "EC2 IP: $EC2_IP"
+echo "KEY PATH: $KEY_PATH"
+echo "------------------------------------"
+
+# 1. SSH 연결 테스트
+echo -e "${YELLOW}📡 SSH 연결 테스트 중...${NC}"
+if ssh -i "$KEY_PATH" -o ConnectTimeout=10 "$DEPLOY_USER@$EC2_IP" "echo 'SSH 연결 성공'" > /dev/null 2>&1; then
+    echo -e "${GREEN}✅ SSH 연결 성공${NC}"
+else
+    echo -e "${RED}❌ SSH 연결 실패. IP와 키 파일을 확인하세요.${NC}"
+    exit 1
+fi
+
+# 2. EC2 서버 환경 설정
+echo -e "${YELLOW}🛠️  서버 환경 설정 중...${NC}"
+ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << 'EOF'
+    # 시스템 업데이트
+    sudo apt update && sudo apt upgrade -y
+    
+    # Node.js 18.x 설치
+    curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+    sudo apt-get install -y nodejs
+    
+    # PM2 글로벌 설치
+    sudo npm install -g pm2 serve
+    
+    # Git 설치
+    sudo apt install -y git
+    
+    # Nginx 설치 및 설정
+    sudo apt install -y nginx
+    
+    # 방화벽 설정
+    sudo ufw allow 22
+    sudo ufw allow 80
+    sudo ufw allow 443
+    sudo ufw allow 3001
+    sudo ufw allow 3002
+    sudo ufw --force enable
+    
+    echo "✅ 서버 환경 설정 완료"
+EOF
+
+# 3. 코드 배포
+echo -e "${YELLOW}📦 코드 배포 중...${NC}"
+ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << EOF
+    # 기존 디렉토리 백업
+    if [ -d "$APP_DIR" ]; then
+        sudo rm -rf ${APP_DIR}_backup
+        sudo mv $APP_DIR ${APP_DIR}_backup
+    fi
+    
+    # 새로운 코드 클론
+    git clone $REPO_URL $APP_DIR
+    cd $APP_DIR
+    
+    # 로그 디렉토리 생성
+    mkdir -p logs
+    
+    echo "✅ 코드 배포 완료"
+EOF
+
+# 4. 환경 변수 설정
+echo -e "${YELLOW}⚙️  환경 변수 설정 중...${NC}"
+echo "환경 변수를 수동으로 설정해야 합니다:"
+echo "ssh -i $KEY_PATH $DEPLOY_USER@$EC2_IP"
+echo "cd $APP_DIR/backend"
+echo "nano .env"
+echo ""
+echo "필요한 환경 변수:"
+echo "DB_HOST=your-rds-endpoint"
+echo "DB_USER=your-db-username"
+echo "DB_PASSWORD=your-db-password"
+echo "DB_DATABASE=lovlechat"
+echo "NODE_ENV=production"
+echo ""
+read -p "환경 변수 설정을 완료했나요? (y/N): " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "환경 변수 설정 후 다시 실행하세요."
+    exit 1
+fi
+
+# 5. 의존성 설치 및 빌드
+echo -e "${YELLOW}🔧 의존성 설치 및 빌드 중...${NC}"
+ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << EOF
+    cd $APP_DIR
+    
+    # 백엔드 의존성 설치 및 빌드
+    cd backend
+    npm install
+    npm run build
+    
+    # 프론트엔드 의존성 설치 및 빌드
+    cd ../frontend
+    npm install
+    npm run build
+    
+    echo "✅ 빌드 완료"
+EOF
+
+# 6. Nginx 설정
+echo -e "${YELLOW}🌐 Nginx 설정 중...${NC}"
+ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << 'EOF'
+    # Nginx 설정 파일 생성
+    sudo tee /etc/nginx/sites-available/lovlechat > /dev/null << 'NGINX_CONF'
+server {
+    listen 80;
+    server_name _;
+
+    # 정적 파일 제공 (React 앱)
+    location / {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    # API 요청 프록시 (Next.js 백엔드)
+    location /api/ {
+        proxy_pass http://localhost:3002;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    # 로그 설정
+    access_log /var/log/nginx/lovlechat_access.log;
+    error_log /var/log/nginx/lovlechat_error.log;
+}
+NGINX_CONF
+
+    # 사이트 활성화
+    sudo ln -sf /etc/nginx/sites-available/lovlechat /etc/nginx/sites-enabled/
+    sudo rm -f /etc/nginx/sites-enabled/default
+    
+    # Nginx 설정 테스트 및 재시작
+    sudo nginx -t
+    sudo systemctl restart nginx
+    sudo systemctl enable nginx
+    
+    echo "✅ Nginx 설정 완료"
+EOF
+
+# 7. PM2로 애플리케이션 시작
+echo -e "${YELLOW}🔄 애플리케이션 시작 중...${NC}"
+ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << EOF
+    cd $APP_DIR
+    
+    # PM2로 애플리케이션 시작
+    pm2 delete all 2>/dev/null || true
+    pm2 start ecosystem.config.js --env production
+    
+    # PM2 부팅시 자동 시작 설정
+    pm2 startup
+    pm2 save
+    
+    echo "✅ 애플리케이션 시작 완료"
+EOF
+
+# 8. 상태 확인
+echo -e "${YELLOW}🔍 배포 상태 확인 중...${NC}"
+ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << 'EOF'
+    echo "=== PM2 프로세스 상태 ==="
+    pm2 list
+    
+    echo ""
+    echo "=== Nginx 상태 ==="
+    sudo systemctl status nginx --no-pager -l
+    
+    echo ""
+    echo "=== 포트 상태 ==="
+    sudo netstat -tlnp | grep -E ':80|:3001|:3002'
+    
+    echo ""
+    echo "=== 최근 로그 ==="
+    echo "Backend 로그:"
+    tail -n 5 /home/ubuntu/lovlechat/logs/backend-combined.log 2>/dev/null || echo "로그 파일 없음"
+    
+    echo ""
+    echo "Frontend 로그:"
+    tail -n 5 /home/ubuntu/lovlechat/logs/frontend-combined.log 2>/dev/null || echo "로그 파일 없음"
+EOF
+
+echo ""
+echo -e "${GREEN}🎉 배포 완료!${NC}"
+echo "------------------------------------"
+echo -e "${BLUE}접속 URL: http://$EC2_IP${NC}"
+echo ""
+echo "추가 명령어:"
+echo "- 로그 확인: ssh -i $KEY_PATH $DEPLOY_USER@$EC2_IP 'pm2 logs'"
+echo "- 프로세스 재시작: ssh -i $KEY_PATH $DEPLOY_USER@$EC2_IP 'pm2 restart all'"
+echo "- 상태 확인: ssh -i $KEY_PATH $DEPLOY_USER@$EC2_IP 'pm2 status'"
+echo ""
+echo -e "${YELLOW}⚠️  보안 그룹에서 다음 포트들이 열려있는지 확인하세요:${NC}"
+echo "- HTTP: 80"
+echo "- HTTPS: 443 (SSL 설정시)"
+echo "- SSH: 22" 

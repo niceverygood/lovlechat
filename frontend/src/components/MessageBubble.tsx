@@ -1,8 +1,9 @@
 import React from "react";
 
 export interface Msg {
-  sender: "user" | "ai" | "system";
+  sender: "user" | "ai" | "character";
   text: string;
+  message?: string; // 백워드 호환성을 위해 추가
   avatar?: string;
   characterName?: string;
   characterProfileImg?: string;
@@ -58,15 +59,16 @@ function parseMessageText(text: string) {
 
 export default function MessageBubble({ message, onProfileClick }: Props) {
   const isUser = message.sender === "user";
+  const isCharacter = message.sender === "character" || message.sender === "ai";
+  
   return (
     <div style={{ 
-      display: message.sender === 'system' ? 'block' : 'flex',
+      display: 'flex',
       flexDirection: isUser ? 'row-reverse' : 'row', 
       alignItems: 'flex-end', 
-      marginBottom: 10, 
-      textAlign: message.sender === 'system' ? 'center' : undefined
+      marginBottom: 10
     }}>
-      {message.sender !== 'system' && isUser && message.avatar && (
+      {isUser && message.avatar && (
         <img
           src={message.avatar || "/imgdefault.jpg"}
           alt="me"
@@ -75,35 +77,21 @@ export default function MessageBubble({ message, onProfileClick }: Props) {
           onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = "/imgdefault.jpg"; }}
         />
       )}
-      {message.sender !== 'system' && !isUser && message.avatar && (
+      {isCharacter && message.avatar && (
         <img
           src={message.avatar || "/imgdefault.jpg"}
-          alt="ai"
+          alt="character"
           style={{ width: 40, height: 40, borderRadius: '50%', marginRight: 10, background: '#222', objectFit: 'cover', cursor: onProfileClick ? 'pointer' : 'default', border: '2px solid #fff' }}
           onClick={onProfileClick}
           onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = "/imgdefault.jpg"; }}
         />
       )}
-      {message.sender === 'system' ? (
-        <div style={{
-          display: 'inline-block',
-          background: message.text.includes('증가') ? '#e3f0ff' : '#ffe3ef',
-          color: message.text.includes('증가') ? '#1976d2' : '#ff4081',
-          fontWeight: 700,
-          fontSize: 15,
-          borderRadius: 12,
-          padding: '7px 18px',
-          margin: '10px auto',
-          maxWidth: 220,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
-        }}>{message.text}</div>
-      ) : (
       <div
         style={{
           maxWidth: 320,
           padding: isUser ? '13px 18px' : '13px 18px',
           borderRadius: 18,
-            background: isUser ? '#ff4081' : 'rgba(255,255,255,0.08)',
+          background: isUser ? '#ff4081' : 'rgba(255,255,255,0.08)',
           color: isUser ? '#fff' : '#fff',
           fontSize: 17,
           fontWeight: 400,
@@ -116,7 +104,6 @@ export default function MessageBubble({ message, onProfileClick }: Props) {
       >
         {parseMessageText(message.text)}
       </div>
-      )}
     </div>
   );
 }

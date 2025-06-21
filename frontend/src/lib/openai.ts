@@ -18,8 +18,8 @@ const getApiBaseUrl = () => {
     return 'https://lovlechat-dq4i.vercel.app';
   }
   
-  // 개발 환경 - proxy 설정이 있으므로 상대 경로 사용
-  return '';
+  // 개발 환경 - localhost의 백엔드 포트로 연결
+  return 'http://localhost:3002';
 };
 
 export const API_BASE_URL = getApiBaseUrl();

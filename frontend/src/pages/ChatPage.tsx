@@ -609,13 +609,18 @@ export default function ChatPage() {
           <div key={idx} style={{ padding: "0 16px", marginBottom: 8 }}>
             <MessageBubble
               message={{
-                ...msg,
-                avatar: msg.sender === "ai"
+                sender: msg.sender,
+                text: msg.message,
+                avatar: msg.sender === "character"
                   ? msg.characterProfileImg || character.profileImg || "/avatars/default-profile.png"
-                  : msg.avatar || persona.avatar || "/imgdefault.jpg"
+                  : persona.avatar || "/imgdefault.jpg",
+                characterName: msg.characterName,
+                characterProfileImg: msg.characterProfileImg,
+                characterAge: msg.characterAge,
+                characterJob: msg.characterJob
               }}
               onProfileClick={() => {
-                if (msg.sender === "ai") {
+                if (msg.sender === "character") {
                   handleProfileClick({
                     id: character.id.toString(),
                     name: msg.characterName || character.name,
