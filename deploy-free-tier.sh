@@ -142,9 +142,22 @@ http {
 }
 NGINX_EOF
     
-    # Nginx 설정 활성화
-    sudo ln -sf /etc/nginx/sites-available/lovlechat /etc/nginx/sites-enabled/
-    sudo rm -f /etc/nginx/sites-enabled/default
+    # Nginx 설정 활성화 (기존 default 설정을 lovlechat 설정으로 교체)
+    echo "🔌 Nginx 설정을 활성화합니다..."
+    sudo ln -sf /etc/nginx/sites-available/lovlechat /etc/nginx/sites-enabled/default
+
+    # nginx.conf의 include 경로가 /etc/nginx/sites-enabled/* 로 되어있을 경우, 
+    # default만 읽도록 명시적으로 변경하여 다른 설정 파일과의 충돌을 방지합니다.
+    echo "🔧 nginx.conf의 include 경로를 수정합니다..."
+    if sudo grep -q "/etc/nginx/sites-enabled/\\*;" /etc/nginx/nginx.conf; then
+        sudo sed -i 's|include /etc/nginx/sites-enabled/\\*;|include /etc/nginx/sites-enabled/default;|g' /etc/nginx/nginx.conf
+        echo "✅ include 경로를 /etc/nginx/sites-enabled/default 로 변경했습니다."
+    else
+        echo "✅ include 경로가 이미 올바르게 설정되어 있거나, 기본 설정이 아닙니다. 건너뜁니다."
+    fi
+    
+    # Nginx 설정 테스트 및 재시작
+    echo "⚙️ Nginx 설정 테스트 및 재시작..."
     sudo nginx -t
     sudo systemctl restart nginx
     sudo systemctl enable nginx
