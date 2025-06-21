@@ -181,7 +181,58 @@ ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << EOF
     echo "✅ 애플리케이션 빌드 완료"
 EOF
 
-# 4. PM2로 애플리케이션 시작
+# 4. 환경변수 설정
+echo -e "${YELLOW}🔧 환경변수 설정 중...${NC}"
+ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << 'EOF'
+    cd /home/ubuntu/lovlechat/backend
+    
+    # 환경변수 파일 생성
+    cat > .env << 'ENV_EOF'
+# 🔧 LovleChat EC2 Production Environment Variables
+NODE_ENV=production
+
+# 데이터베이스 설정 (AWS RDS)
+DB_HOST=lovlechat.c9qrb8j7h7pf.ap-northeast-2.rds.amazonaws.com
+DB_USER=admin
+DB_PASSWORD=lovlechat123!
+DB_DATABASE=lovlechat
+DB_PORT=3306
+
+# 서버 설정
+PORT=3002
+FRONTEND_URL=http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+
+# OpenAI API (채팅 기능용) - 실제 키로 교체 필요
+OPENAI_API_KEY=sk-your-openai-api-key
+
+# 아임포트 결제 설정 - 실제 키로 교체 필요
+IAMPORT_KEY=your-iamport-key
+IAMPORT_SECRET=your-iamport-secret
+
+# Firebase 설정 (인증용) - 실제 설정으로 교체 필요
+FIREBASE_PROJECT_ID=your-firebase-project-id
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nyour-firebase-private-key\n-----END PRIVATE KEY-----\n"
+FIREBASE_CLIENT_EMAIL=your-firebase-client-email
+
+# 로그 레벨
+LOG_LEVEL=info
+
+# CORS 설정
+CORS_ORIGIN=http://$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
+
+# 캐시 설정
+CACHE_TTL=300
+MAX_CACHE_SIZE=100
+
+# EC2 전용 설정
+IS_EC2=true
+ENV_EOF
+    
+    echo "✅ 환경변수 설정 완료"
+    echo "⚠️  OpenAI, 아임포트, Firebase 키는 수동으로 설정하세요"
+EOF
+
+# 5. PM2로 애플리케이션 시작
 echo -e "${YELLOW}🚀 애플리케이션 시작 중...${NC}"
 ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << EOF
     cd $APP_DIR
@@ -194,7 +245,7 @@ ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << EOF
     echo "✅ 애플리케이션 시작 완료"
 EOF
 
-# 5. 방화벽 설정
+# 6. 방화벽 설정
 echo -e "${YELLOW}🔒 방화벽 설정 중...${NC}"
 ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << 'EOF'
     # UFW 방화벽 설정
@@ -208,7 +259,7 @@ ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << 'EOF'
     echo "✅ 방화벽 설정 완료"
 EOF
 
-# 6. 상태 확인
+# 7. 상태 확인
 echo -e "${YELLOW}📊 배포 상태 확인 중...${NC}"
 ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << 'EOF'
     echo "=== PM2 프로세스 상태 ==="
