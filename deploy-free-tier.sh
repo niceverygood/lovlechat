@@ -94,8 +94,8 @@ server {
     }
     
     # 백엔드 API (Next.js)
-    location /api {
-        proxy_pass http://127.0.0.1:3002;
+    location /api/ {
+        proxy_pass http://127.0.0.1:3002/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -150,8 +150,9 @@ ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << EOF
     # Serve 글로벌 설치
     sudo npm install -g serve
     
-    # 로그 디렉토리 생성
-    mkdir -p $APP_DIR/logs
+    # 로그 디렉토리 생성 (백엔드 및 프론트엔드)
+    mkdir -p $APP_DIR/backend/logs
+    mkdir -p $APP_DIR/frontend/logs
     
     echo "✅ 애플리케이션 빌드 완료"
 EOF
