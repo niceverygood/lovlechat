@@ -71,73 +71,35 @@ ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << 'EOF'
     
     # 프리 티어 최적화 Nginx 설정
     sudo tee /etc/nginx/sites-available/lovlechat > /dev/null << 'NGINX_EOF'
-# 프리 티어 최적화 Nginx 설정
-worker_processes 1;  # CPU 1개에 맞춤
-worker_connections 512;  # 연결 수 제한
-
-events {
-    worker_connections 512;
-    use epoll;
-}
-
-http {
+server {
+    listen 80;
+    server_name _;
+    
     # 기본 설정
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-    
-    # 성능 최적화
-    sendfile on;
-    tcp_nopush on;
-    tcp_nodelay on;
-    keepalive_timeout 30;  # 짧게 설정
-    types_hash_max_size 2048;
     client_max_body_size 10M;
-    
+
     # Gzip 압축 (대역폭 절약)
     gzip on;
     gzip_vary on;
     gzip_min_length 1024;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
     
-    # 캐싱 설정
-    expires 7d;
-    add_header Cache-Control "public, immutable";
+    # 프론트엔드 (React)
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
     
-    server {
-        listen 80;
-        server_name _;
-        
-        # 프론트엔드 (React)
-        location / {
-            proxy_pass http://127.0.0.1:3001;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection 'upgrade';
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_cache_bypass $http_upgrade;
-            proxy_connect_timeout 5s;
-            proxy_send_timeout 10s;
-            proxy_read_timeout 10s;
-        }
-        
-        # 백엔드 API (Next.js)
-        location /api {
-            proxy_pass http://127.0.0.1:3002;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection 'upgrade';
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_cache_bypass $http_upgrade;
-            proxy_connect_timeout 5s;
-            proxy_send_timeout 10s;
-            proxy_read_timeout 10s;
-        }
+    # 백엔드 API (Next.js)
+    location /api {
+        proxy_pass http://127.0.0.1:3002;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 NGINX_EOF
@@ -168,10 +130,17 @@ EOF
 # 3. 애플리케이션 배포
 echo -e "${YELLOW}📂 애플리케이션 배포 중...${NC}"
 ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << EOF
-    # 기존 디렉토리 제거 및 새로 클론
-    rm -rf $APP_DIR
-    git clone $REPO_URL $APP_DIR
-    cd $APP_DIR
+    # 기존 디렉토리 존재 여부에 따라 클론 또는 풀
+    if [ -d "$APP_DIR" ]; then
+      echo "🔄 기존 디렉토리가 존재합니다. git pull로 업데이트합니다..."
+      cd $APP_DIR
+      git reset --hard HEAD
+      git pull origin main
+    else
+      echo "📂 새로운 디렉토리에 git clone을 실행합니다..."
+      git clone $REPO_URL $APP_DIR
+      cd $APP_DIR
+    fi
     
     # 백엔드 빌드 (메모리 제한 적용)
     echo "🔨 백엔드 빌드 중..."
