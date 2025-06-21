@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
       [personaId, userId, normalizedData.name, normalizedData.avatar, normalizedData.gender, normalizedData.age, normalizedData.job]
     );
 
-    if (result.success) {
+    if (result.affectedRows > 0) {
       return successResponse({ 
         id: personaId,
         message: '페르소나가 성공적으로 생성되었습니다!',

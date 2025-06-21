@@ -182,7 +182,7 @@ export async function POST(req: NextRequest) {
       ]
     );
 
-    if (result.success && result.insertId) {
+    if (result.affectedRows > 0 && result.insertId) {
       return successResponse({ 
         id: result.insertId,
         message: '캐릭터가 성공적으로 생성되었습니다!',

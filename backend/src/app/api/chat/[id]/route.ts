@@ -1,5 +1,10 @@
 import { NextRequest } from "next/server";
-import { executeQuery, executeMutation, parseJsonSafely } from "@/lib/db-helper";
+import {
+  executeQuery,
+  executeMutation,
+  parseJsonSafely,
+  executeQueryWithCache,
+} from "@/lib/db-helper";
 import { successResponse, errorResponse, optionsResponse } from "@/lib/cors";
 
 /**
@@ -27,28 +32,40 @@ export async function GET(
     // 🚀 병합된 쿼리로 한 번에 모든 데이터 조회
     const [messages, favorData, character] = await Promise.all([
       // 메시지 목록 (최적화된 쿼리)
-      executeQuery(`
+      executeQueryWithCache(
+        `
         SELECT id, message, sender, characterName, characterProfileImg, 
                DATE_FORMAT(createdAt, '%Y-%m-%d %H:%i:%s') as timestamp
         FROM chats 
         WHERE personaId = ? AND characterId = ? 
         ORDER BY createdAt ASC 
         LIMIT ${MAX_MESSAGES}
-      `, [personaId, characterId], { cache: true }),
+      `,
+        [personaId, characterId],
+        CACHE_DURATION
+      ),
 
       // 호감도 (단순 쿼리)
-      executeQuery(`
+      executeQueryWithCache(
+        `
         SELECT favor 
         FROM character_favors 
         WHERE personaId = ? AND characterId = ?
-      `, [personaId, characterId], { cache: true }),
+      `,
+        [personaId, characterId],
+        CACHE_DURATION
+      ),
 
       // 캐릭터 정보 (핵심 정보만)
-      executeQuery(`
+      executeQueryWithCache(
+        `
         SELECT name, profileImg, backgroundImg, firstMessage
         FROM character_profiles 
         WHERE id = ?
-      `, [characterId], { cache: true })
+      `,
+        [characterId],
+        CACHE_DURATION
+      ),
     ]);
 
     // 🔥 응답 데이터 최적화
@@ -92,17 +109,25 @@ export async function POST(
 
     // 🚀 병렬 데이터 조회 (캐시 활용)
     const [persona, character] = await Promise.all([
-      executeQuery(`
+      executeQueryWithCache(
+        `
         SELECT name, userId, personality, interests, background
         FROM personas 
         WHERE id = ?
-      `, [personaId], { cache: true }),
+      `,
+        [personaId],
+        CACHE_DURATION
+      ),
 
-      executeQuery(`
+      executeQueryWithCache(
+        `
         SELECT name, profileImg, personality, firstMessage, backgroundImg
         FROM character_profiles 
         WHERE id = ?
-      `, [characterId], { cache: true })
+      `,
+        [characterId],
+        CACHE_DURATION
+      ),
     ]);
 
     if (!persona[0] || !character[0]) {
@@ -167,14 +192,17 @@ Response (한국어, 50자 이내):`;
     ]);
 
     // 🔥 업데이트된 메시지 목록 반환 (최신 50개)
-    const updatedMessages = await executeQuery(`
+    const updatedMessages = await executeQuery(
+      `
       SELECT id, message, sender, characterName, characterProfileImg,
              DATE_FORMAT(createdAt, '%Y-%m-%d %H:%i:%s') as timestamp
       FROM chats 
       WHERE personaId = ? AND characterId = ? 
       ORDER BY createdAt ASC 
       LIMIT ${MAX_MESSAGES}
-    `, [personaId, characterId], { cache: false }); // 캐시 사용 안함
+    `,
+      [personaId, characterId]
+    ); // 캐시 사용 안함
 
     const responseData = {
       messages: updatedMessages,

@@ -8,13 +8,19 @@
     "dev:cloud": "cp .env.development.cloud .env && next dev -p 3002",
     "dev:turbo": "next dev --turbo -p 3002",
     "build": "next build",
+    "build:fast": "NEXT_TELEMETRY_DISABLED=1 next build",
     "build:analyze": "ANALYZE=true next build",
+    "build:prod": "NODE_ENV=production next build",
     "start": "next start",
     "start:prod": "NODE_ENV=production next start -p 3002",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
     "clean": "rm -rf .next out",
-    "type-check": "tsc --noEmit"
+    "clean:all": "rm -rf .next out node_modules/.cache .tsbuildinfo",
+    "type-check": "tsc --noEmit",
+    "type-check:watch": "tsc --noEmit --watch",
+    "build:clean": "npm run clean && npm run build",
+    "build:fast:clean": "npm run clean && npm run build:fast"
   },
   "dependencies": {
     "cors": "^2.8.5",

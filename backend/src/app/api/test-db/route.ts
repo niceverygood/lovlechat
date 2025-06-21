@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { pool } from '../../../lib/db';
+import { getPool } from '../../../lib/db';
 import { CORS_HEADERS } from '../../../lib/cors';
 
 // 🔍 DB 연결 상태 테스트 API
@@ -7,6 +7,7 @@ export async function GET(request: NextRequest) {
   try {
     console.log('🔍 DB 연결 테스트 시작...');
     
+    const pool = getPool();
     // 1. 기본 연결 테스트
     const connection = await pool.getConnection();
     console.log('✅ DB 연결 풀 획득 성공');

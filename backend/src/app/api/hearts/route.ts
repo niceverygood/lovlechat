@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeQuery } from '../../../lib/db-helper';
 import { CORS_HEADERS } from '../../../lib/cors';
-import { pool } from '../../../lib/db';
+import { getPool } from '../../../lib/db';
 
 // 🎯 사용자 하트 조회 API
 export async function GET(request: NextRequest) {
@@ -145,6 +145,7 @@ export async function POST(request: NextRequest) {
     const newHearts = currentHearts - amount;
 
     // DB 연결 및 트랜잭션으로 하트 차감 및 내역 저장
+    const pool = getPool();
     connection = await pool.getConnection();
     
     // 트랜잭션 시작 (올바른 방법)

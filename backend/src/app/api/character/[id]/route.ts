@@ -38,8 +38,7 @@ export async function GET(req: NextRequest, context: any) {
     // 최적화된 캐릭터 데이터 조회
     const rows = await executeQuery(
       "SELECT id, profileImg, name, age, job, oneLiner, background, personality, habit, likes, dislikes, extraInfos, gender, scope, roomCode, category, tags, attachments, firstScene, firstMessage, backgroundImg, createdAt, updatedAt FROM character_profiles WHERE id = ?",
-      [id],
-      5000
+      [id]
     );
 
     if (!Array.isArray(rows) || rows.length === 0) {
@@ -179,8 +178,7 @@ export async function PUT(req: NextRequest, context: any) {
         firstMessage,
         backgroundImg,
         id
-      ],
-      8000
+      ]
     );
     
     return NextResponse.json({ ok: true }, {
@@ -228,8 +226,7 @@ export async function DELETE(req: NextRequest, context: any) {
     // 최적화된 삭제 쿼리 (숨김 처리)
     await executeMutation(
       'INSERT IGNORE INTO character_hidden (userId, characterId) VALUES (?, ?)',
-      [userId, id],
-      4000
+      [userId, id]
     );
     
     return NextResponse.json({ ok: true }, {

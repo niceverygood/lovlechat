@@ -23,8 +23,7 @@ export async function POST(request: NextRequest) {
     // 1. 현재 사용자 하트 확인
     const user = await executeQuery(
       'SELECT hearts FROM users WHERE userId = ?',
-      [userId],
-      5000
+      [userId]
     );
 
     console.log('사용자 조회 결과:', user);
@@ -61,8 +60,7 @@ export async function POST(request: NextRequest) {
     // 3. 새로받기 횟수 확인 (5개 + 이전 횟수)
     const refreshHistory = await executeQuery(
       'SELECT COUNT(*) as refreshCount FROM heart_transactions WHERE userId = ? AND type = "refresh"',
-      [userId],
-      5000
+      [userId]
     );
 
     const previousRefreshCount = refreshHistory[0]?.refreshCount || 0;
@@ -96,8 +94,7 @@ export async function POST(request: NextRequest) {
     // 6. 하트 차감
     await executeMutation(
       'UPDATE users SET hearts = ? WHERE userId = ?',
-      [newHearts, userId],
-      5000
+      [newHearts, userId]
     );
 
     console.log('하트 차감 완료');
@@ -105,8 +102,7 @@ export async function POST(request: NextRequest) {
     // 7. 사용 내역 저장
     await executeMutation(
       'INSERT INTO heart_transactions (userId, amount, type, description, beforeHearts, afterHearts, relatedId) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [userId, -requiredHearts, 'refresh', `캐릭터 카드 새로 받기 (${charactersToReceive}장)`, currentHearts, newHearts, `refresh_${Date.now()}`],
-      5000
+      [userId, -requiredHearts, 'refresh', `캐릭터 카드 새로 받기 (${charactersToReceive}장)`, currentHearts, newHearts, `refresh_${Date.now()}`]
     );
 
     console.log('거래 내역 저장 완료');
@@ -164,7 +160,7 @@ async function analyzeUserPreferences(userId: string) {
       WHERE p.userId = ? AND cf.favor > 0
       ORDER BY cf.favor DESC
       LIMIT 10
-    `, [userId], 5000);
+    `, [userId]);
 
     // 2. 대화한 캐릭터들의 특성 분석
     const chattedCharacters = await executeQuery(`
@@ -176,7 +172,7 @@ async function analyzeUserPreferences(userId: string) {
       GROUP BY cp.id, cp.gender, cp.job, cp.category, cp.tags, cp.age
       ORDER BY chatCount DESC
       LIMIT 10
-    `, [userId], 5000);
+    `, [userId]);
 
     // 특성별 선호도 계산
     const preferences: {
@@ -243,7 +239,7 @@ async function getRecommendedCharacters(userId: string, count: number, preferenc
       WHERE ht.userId = ? 
       AND ht.type = 'refresh' 
       AND ht.createdAt > DATE_SUB(NOW(), INTERVAL 30 DAY)
-    `, [userId], 5000);
+    `, [userId]);
 
     const excludeIds = recentRefreshCharacters
       .map(row => row.characterId)
@@ -253,7 +249,7 @@ async function getRecommendedCharacters(userId: string, count: number, preferenc
     // 숨긴 캐릭터 제외
     const hiddenCharacters = await executeQuery(`
       SELECT characterId FROM character_hidden WHERE userId = ?
-    `, [userId], 5000);
+    `, [userId]);
 
     const hiddenIds = hiddenCharacters.map(row => row.characterId);
     const allExcludeIds = [...excludeIds, ...hiddenIds];
@@ -275,7 +271,7 @@ async function getRecommendedCharacters(userId: string, count: number, preferenc
     }
 
     // 모든 공개 캐릭터 조회
-    const allCharacters = await executeQuery(baseQuery, queryParams, 10000);
+    const allCharacters = await executeQuery(baseQuery, queryParams);
 
     if (allCharacters.length === 0) {
       // 제외 조건을 완화하여 다시 시도
@@ -286,7 +282,7 @@ async function getRecommendedCharacters(userId: string, count: number, preferenc
         WHERE scope = '공개'
         ORDER BY RAND()
         LIMIT ?
-      `, [count], 5000);
+      `, [count]);
       
       return fallbackCharacters;
     }
@@ -355,7 +351,7 @@ async function getRecommendedCharacters(userId: string, count: number, preferenc
       WHERE scope = '공개'
       ORDER BY RAND()
       LIMIT ?
-    `, [count], 5000);
+    `, [count]);
     
     return fallbackCharacters;
   }

@@ -18,7 +18,7 @@ EC2_IP=${1:-"your-ec2-ip"}
 KEY_PATH=${2:-"~/.ssh/lovlechat-key.pem"}
 DEPLOY_USER="ubuntu"
 APP_DIR="/home/ubuntu/lovlechat"
-REPO_URL="https://github.com/your-username/LovleChat.git"
+REPO_URL="https://github.com/niceverygood/lovlechat.git"
 
 echo -e "${BLUE}🆓 LovleChat 프리 티어 EC2 배포 시작${NC}"
 echo "EC2 IP: $EC2_IP"
