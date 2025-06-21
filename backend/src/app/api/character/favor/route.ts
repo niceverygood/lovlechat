@@ -51,8 +51,7 @@ export async function GET(req: NextRequest) {
        JOIN character_profiles cp ON cf.characterId = cp.id
        WHERE cf.personaId = ?
        ORDER BY cp.createdAt DESC`,
-      [userId],
-      3000
+      [userId]
     );
     
     const liked = Array.isArray(rows) ? rows.map((row: any) => parseInt(row.characterId)) : [];
@@ -107,8 +106,7 @@ export async function POST(req: NextRequest) {
     // 좋아요 추가 (이미 있으면 무시)
     await executeMutation(
       "INSERT IGNORE INTO character_favors (personaId, characterId, favor) VALUES (?, ?, 1)",
-      [userId, characterId],
-      3000
+      [userId, characterId]
     );
     
     return NextResponse.json(
@@ -160,8 +158,7 @@ export async function DELETE(req: NextRequest) {
     // 좋아요 제거
     await executeMutation(
       "DELETE FROM character_favors WHERE personaId = ? AND characterId = ?",
-      [userId, characterId],
-      3000
+      [userId, characterId]
     );
     
     return NextResponse.json(

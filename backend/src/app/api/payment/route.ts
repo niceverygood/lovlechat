@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { pool } from '@/lib/db';
+import { getPool } from '@/lib/db';
 import { CORS_HEADERS } from '@/lib/cors';
 
 // 아임포트 REST API 설정 (실제 운영용)
@@ -117,6 +117,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. DB 연결 및 트랜잭션 시작
+    const pool = getPool();
     connection = await pool.getConnection();
     
     // 트랜잭션 시작 (올바른 방법)

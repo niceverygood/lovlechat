@@ -24,8 +24,7 @@ export async function GET(req: NextRequest) {
     // 최적화된 첫 데이트 조회
     const rows = await executeQuery(
       "SELECT MIN(createdAt) as firstDate FROM chats WHERE personaId = ? AND characterId = ?",
-      [personaId, characterId],
-      3000
+      [personaId, characterId]
     );
 
     if (!Array.isArray(rows) || rows.length === 0) {

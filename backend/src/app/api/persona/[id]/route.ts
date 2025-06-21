@@ -26,8 +26,7 @@ export async function GET(req: NextRequest, context: any) {
     const personas = await executeQueryWithCache(
       "SELECT id, userId, name, avatar, gender, age, job, info, habit, personality, interests, background, createdAt FROM personas WHERE id = ?",
       [id],
-      180, // 3분 캐시
-      3000
+      180 // 3분 캐시
     );
 
     if (!personas || personas.length === 0) {
@@ -84,11 +83,10 @@ export async function PUT(req: NextRequest, context: any) {
       `UPDATE personas SET 
        name = ?, avatar = ?, gender = ?, age = ?, job = ?, updatedAt = NOW()
        WHERE id = ?`,
-      [normalizedData.name, normalizedData.avatar, normalizedData.gender, normalizedData.age, normalizedData.job, id],
-      5000
+      [normalizedData.name, normalizedData.avatar, normalizedData.gender, normalizedData.age, normalizedData.job, id]
     );
 
-    if (result[0].affectedRows === 0) {
+    if (result.affectedRows === 0) {
       return errorResponse('페르소나를 찾을 수 없습니다.', 404);
     }
 
@@ -117,23 +115,20 @@ export async function DELETE(req: NextRequest, context: any) {
     // 관련 채팅 데이터도 함께 삭제
     await executeMutation(
       "DELETE FROM chats WHERE personaId = ?",
-      [id],
-      3000
+      [id]
     );
 
     await executeMutation(
       "DELETE FROM character_favors WHERE personaId = ?", 
-      [id],
-      3000
+      [id]
     );
 
     const result = await executeMutation(
       "DELETE FROM personas WHERE id = ?",
-      [id],
-      3000
+      [id]
     );
 
-    if (result[0].affectedRows === 0) {
+    if (result.affectedRows === 0) {
       return errorResponse('페르소나를 찾을 수 없습니다.', 404);
     }
 

@@ -23,8 +23,7 @@ export async function GET(req: NextRequest) {
        WHERE scope = '공개' 
        ORDER BY RAND() 
        LIMIT ?`,
-      [dummyCount],
-      5000
+      [dummyCount]
     );
 
     console.log(`DB에서 가져온 캐릭터 수: ${characters.length}`);

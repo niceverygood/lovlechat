@@ -193,15 +193,13 @@ export async function POST(req: NextRequest) {
       const [characterRows, personaRows] = await Promise.all([
         executeQuery(
           "SELECT * FROM character_profiles WHERE id = ?",
-          [data.characterId],
-          2500
+          [data.characterId]
         ),
         data.personaId === 'guest' 
           ? Promise.resolve([{ id: 'guest', name: '게스트', avatar: '/imgdefault.jpg', gender: '비공개', age: null, job: '비공개' }])
           : executeQuery(
               "SELECT * FROM personas WHERE id = ?",
-              [data.personaId],
-              2500
+              [data.personaId]
             )
       ]);
       
@@ -215,13 +213,11 @@ export async function POST(req: NextRequest) {
       const [_, chatHistory] = await Promise.all([
         executeMutation(
           "INSERT INTO chats (personaId, characterId, message, sender, characterName, characterProfileImg, characterAge, characterJob) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-          [data.personaId, data.characterId, data.message, data.sender, character.name, character.profileImg, character.age, character.job],
-          2000
+          [data.personaId, data.characterId, data.message, data.sender, character.name, character.profileImg, character.age, character.job]
         ),
         executeQuery(
           "SELECT message, sender FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt DESC LIMIT 3",
-          [data.personaId, data.characterId],
-          2000
+          [data.personaId, data.characterId]
         )
       ]);
 
@@ -353,8 +349,7 @@ export async function POST(req: NextRequest) {
       const savePromises: Promise<any>[] = [
         executeMutation(
           "INSERT INTO chats (personaId, characterId, message, sender, characterName, characterProfileImg, characterAge, characterJob) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-          [data.personaId, data.characterId, aiText, "ai", character.name, character.profileImg, character.age, character.job],
-          1500
+          [data.personaId, data.characterId, aiText, "ai", character.name, character.profileImg, character.age, character.job]
         ).catch(() => null)
       ];
 
@@ -362,8 +357,7 @@ export async function POST(req: NextRequest) {
         savePromises.push(
           executeMutation(
             `INSERT INTO character_favors (personaId, characterId, favor) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE favor = GREATEST(0, LEAST(100, favor + VALUES(favor)))`,
-            [data.personaId, data.characterId, favorDelta],
-            1500
+            [data.personaId, data.characterId, favorDelta]
           ).catch((err) => {
             console.error("호감도 업데이트 실패:", err);
             return null;
@@ -450,13 +444,11 @@ export async function GET(req: NextRequest) {
     const [messages, favorRows] = await Promise.all([
       executeQuery(
         "SELECT * FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT 100",
-        [personaId, characterId],
-        3000
+        [personaId, characterId]
       ),
       executeQuery(
         "SELECT favor FROM character_favors WHERE personaId = ? AND characterId = ?",
-        [personaId, characterId],
-        1500
+        [personaId, characterId]
       ).catch(() => [])
     ]);
     
@@ -496,11 +488,14 @@ export async function DELETE(req: NextRequest) {
       return errorResponse("personaId, characterId required", 400);
     }
 
-    await executeMutation(
+    const result = await executeMutation(
       "DELETE FROM chats WHERE personaId = ? AND characterId = ?",
-      [personaId, characterId],
-      3000
+      [personaId, characterId]
     );
+
+    if ((result as ResultSetHeader).affectedRows > 0) {
+      return successResponse({ message: `${(result as ResultSetHeader).affectedRows}개의 메시지가 삭제되었습니다.` });
+    }
     
     return successResponse({});
     

@@ -89,7 +89,9 @@ export async function executeQuery(
     // 캐시 저장 (크기 제한)
     if (queryCache.size >= MAX_CACHE_SIZE) {
       const firstKey = queryCache.keys().next().value;
-      queryCache.delete(firstKey);
+      if (firstKey) {
+        queryCache.delete(firstKey);
+      }
     }
     queryCache.set(cacheKey, { data: result, timestamp: Date.now() });
     
@@ -149,11 +151,11 @@ export async function executeUpdate(
       fieldCount: 0,
       affectedRows: 1,
       insertId: 1,
-      info: '',
-      serverStatus: 0,
+      info: 'Dummy result',
+      serverStatus: 2,
       warningStatus: 0,
-      changedRows: 0
-    };
+      changedRows: 1
+    } as ResultSetHeader;
   }
   
   const startTime = Date.now();
