@@ -23,6 +23,7 @@ declare global {
 const isVercel = !!(process.env.VERCEL || process.env.VERCEL_ENV);
 const isLocal = !isVercel && process.env.NODE_ENV === 'development';
 const isProduction = process.env.NODE_ENV === 'production';
+const isDummyMode = !process.env.DB_HOST || process.env.DB_HOST === 'localhost' && process.env.DB_USER === 'dummy';
 
 // === 🚀 극도로 최적화된 DB 설정 ===
 const DB_CONFIG: mysql.PoolOptions = {
@@ -82,6 +83,9 @@ function initializePool(): mysql.Pool {
 
 // === 🚀 메인 풀 접근 함수 ===
 export function getPool(): mysql.Pool {
+  if (isDummyMode) {
+    throw new Error('더미 모드에서는 DB 연결을 사용할 수 없습니다');
+  }
   return initializePool();
 }
 

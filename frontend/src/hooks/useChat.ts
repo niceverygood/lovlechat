@@ -1,13 +1,18 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { API_BASE_URL } from '../lib/openai';
 
 // === 타입 정의 ===
 interface Message {
   id: string;
+  text: string; // MessageBubble 호환을 위해 필수로 변경
   message: string;
-  sender: 'user' | 'character';
+  sender: 'user' | 'character' | 'ai'; // 백엔드 API와 일치하도록 수정
   timestamp: string;
   characterName?: string;
   characterProfileImg?: string;
+  characterAge?: number;
+  characterJob?: string;
+  avatar?: string;
 }
 
 interface ChatState {
@@ -24,6 +29,10 @@ interface Character {
   profileImg: string;
   backgroundImg?: string;
   firstMessage?: string;
+  age?: number;
+  job?: string;
+  info?: string;
+  habit?: string;
 }
 
 interface ChatListItem {
@@ -77,7 +86,7 @@ const ultraFetch = async <T = any>(
   
   const requestPromise = (async () => {
     try {
-      const response = await fetch(`/api${url}`, {
+      const response = await fetch(`${API_BASE_URL}/api${url}`, {
         ...options,
         signal: controller.signal,
         headers: {
@@ -149,7 +158,7 @@ const ultraDebounce = (func: Function, delay: number, key: string) => {
 };
 
 export function useChat(
-  characterId?: string,
+  characterId?: string | number,
   personaId?: string,
   personaAvatar?: string,
   userId?: string,
@@ -221,7 +230,9 @@ export function useChat(
   const sendMessage = useCallback((message: string) => {
     if (!characterId || !personaId) return;
     
-    const debounceKey = `send_${characterId}_${personaId}`;
+    const charId = String(characterId);
+    const persId = String(personaId);
+    const debounceKey = `send_${charId}_${persId}`;
     
     ultraDebounce(async () => {
       if (isUnmountedRef.current) return;
@@ -229,9 +240,9 @@ export function useChat(
       setState(prev => ({ ...prev, loading: true, error: null }));
       
       try {
-        const data = await ultraFetch(`/chat/${characterId}`, {
+        const data = await ultraFetch(`/chat/${charId}`, {
           method: 'POST',
-          body: JSON.stringify({ personaId, message })
+          body: JSON.stringify({ personaId: persId, message })
         }, 5000); // 메시지 전송은 5초 타임아웃
         
         if (!isUnmountedRef.current) {
@@ -246,7 +257,7 @@ export function useChat(
         
         // 관련 캐시 무효화
         globalCache.forEach((value, key) => {
-          if (key.includes(`/chat/${characterId}`) || key.includes('/chat/list')) {
+          if (key.includes(`/chat/${charId}`) || key.includes('/chat/list')) {
             globalCache.delete(key);
           }
         });
@@ -268,7 +279,9 @@ export function useChat(
   
   // === 초기 데이터 로드 ===
   useEffect(() => {
-    if (characterId && personaId && characterId.trim() && personaId.trim()) {
+    const charIdStr = String(characterId || '');
+    const personaIdStr = String(personaId || '');
+    if (characterId && personaId && charIdStr.trim() && personaIdStr.trim()) {
       loadMessages(characterId, personaId);
     }
   }, [characterId, personaId, loadMessages]);
@@ -285,7 +298,7 @@ export function useChat(
   }, []);
   
   // === 🚀 초고속 첫 만남 날짜 ===
-  const getFirstMeetDate = useCallback(async (characterId: number, personaId: string): Promise<string> => {
+  const getFirstMeetDate = useCallback(async (characterId: number | string, personaId: string): Promise<string> => {
     try {
       const data = await ultraFetch(`/chat/first-date?characterId=${characterId}&personaId=${personaId}`);
       return data.firstDate || new Date().toISOString().split('T')[0];

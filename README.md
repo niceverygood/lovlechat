@@ -147,7 +147,40 @@ REACT_APP_API_BASE_URL=http://localhost:3002
 
 ## 📱 배포
 
-### Vercel (권장)
+### 🚀 EC2 자동 배포 (NEW!)
+완전 자동화된 EC2 배포 시스템을 사용해보세요!
+
+```bash
+# 1. 스크립트 권한 설정
+chmod +x deploy-ec2.sh deploy-free-tier.sh setup-ssl.sh monitor.sh
+
+# 2-A. 🆓 프리 티어 배포 (추천! - 완전 무료)
+./deploy-free-tier.sh YOUR_EC2_IP ~/.ssh/your-key.pem
+
+# 2-B. 일반 EC2 배포 (Node.js + PM2 + Nginx)
+./deploy-ec2.sh YOUR_EC2_IP ~/.ssh/your-key.pem
+
+# 3. SSL 인증서 설정 (도메인 필요)
+./setup-ssl.sh your-domain.com YOUR_EC2_IP ~/.ssh/your-key.pem
+
+# 4. 모니터링 및 관리
+./monitor.sh status YOUR_EC2_IP ~/.ssh/your-key.pem
+./monitor.sh logs YOUR_EC2_IP
+./monitor.sh restart YOUR_EC2_IP
+./monitor.sh update YOUR_EC2_IP
+```
+
+**주요 특징:**
+- ✅ **원클릭 배포**: EC2 환경 설정부터 앱 실행까지 자동화
+- ✅ **PM2 프로세스 관리**: 무중단 운영 및 자동 재시작
+- ✅ **Nginx 리버스 프록시**: 로드 밸런싱 및 SSL 지원
+- ✅ **SSL 자동 설정**: Let's Encrypt 무료 인증서
+- ✅ **모니터링 도구**: 실시간 상태 확인 및 로그 관리
+- ✅ **자동 백업**: 데이터베이스 백업 스케줄링
+
+**📋 상세 가이드**: [EC2-DEPLOYMENT-GUIDE.md](./EC2-DEPLOYMENT-GUIDE.md)
+
+### Vercel (기존)
 1. GitHub 저장소를 Vercel에 연결
 2. 환경변수 설정
 3. 자동 배포 완료
