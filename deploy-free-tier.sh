@@ -130,17 +130,10 @@ EOF
 # 3. 애플리케이션 배포
 echo -e "${YELLOW}📂 애플리케이션 배포 중...${NC}"
 ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << EOF
-    # 기존 디렉토리 존재 여부에 따라 클론 또는 풀
-    if [ -d "$APP_DIR" ]; then
-      echo "🔄 기존 디렉토리가 존재합니다. git pull로 업데이트합니다..."
-      cd $APP_DIR
-      git reset --hard HEAD
-      git pull origin main
-    else
-      echo "📂 새로운 디렉토리에 git clone을 실행합니다..."
-      git clone $REPO_URL $APP_DIR
-      cd $APP_DIR
-    fi
+    # 기존 디렉토리 제거 및 새로 클론
+    rm -rf $APP_DIR
+    git clone $REPO_URL $APP_DIR
+    cd $APP_DIR
     
     # 백엔드 빌드 (메모리 제한 적용)
     echo "🔨 백엔드 빌드 중..."
