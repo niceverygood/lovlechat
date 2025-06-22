@@ -1,16 +1,8 @@
 import mysql from "mysql2/promise";
+import { EventEmitter } from 'events';
 
 // === 완전한 메모리 누수 방지 시스템 ===
-require('events').EventEmitter.defaultMaxListeners = 0;
-
-// 모든 이벤트 리스너 제한 해제
-try {
-  if (process.setMaxListeners) process.setMaxListeners(0);
-  if (process.stdout && process.stdout.setMaxListeners) process.stdout.setMaxListeners(0);
-  if (process.stderr && process.stderr.setMaxListeners) process.stderr.setMaxListeners(0);
-} catch (error) {
-  // 이벤트 리스너 설정 실패 무시
-}
+EventEmitter.defaultMaxListeners = 0;
 
 // === 전역 변수로 진정한 싱글톤 보장 ===
 declare global {
@@ -30,7 +22,7 @@ const DB_CONFIG: mysql.PoolOptions = {
   host: process.env.DB_HOST || 'lovlechat-db.cf48aygyuqv7.ap-southeast-2.rds.amazonaws.com',
   port: parseInt(process.env.DB_PORT || '3306'),
   user: process.env.DB_USER || 'admin',
-  password: process.env.DB_PASSWORD || 'Lovle123!',
+  password: process.env.DB_PASSWORD,
   database: process.env.DB_DATABASE || 'lovlechat',
   charset: 'utf8mb4',
   
@@ -66,8 +58,8 @@ function initializePool(): mysql.Pool {
           await global.__LOVLE_DB_POOL__.end();
           global.__LOVLE_DB_POOL__ = undefined;
         }
-      } catch (error) {
-        // 정리 실패 무시
+      } catch (err: unknown) {
+        console.warn('DB 풀 정리 중 에러 발생 (무시됨):', (err as Error).message);
       }
     };
     
@@ -110,13 +102,13 @@ export async function checkConnection(): Promise<boolean> {
     lastCheck = now;
     return true;
     
-  } catch (error) {
+  } catch (error: any) {
     isHealthy = false;
     lastCheck = now;
     
     // 에러 로그는 프로덕션에서만
     if (isProduction) {
-      console.error('DB 연결 에러:', error);
+      console.error('DB 연결 에러:', error as Error);
     }
     
     return false;
