@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAuth } from './useAuth';
-import { corsRequest } from '../lib/openai';
+import { corsRequest, API_BASE_URL } from '../lib/openai';
 
 // === 타입 정의 ===
 interface Message {
@@ -77,7 +77,7 @@ export const useChat = (characterId?: number | string, personaId?: string) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
-      const url = `/api/chat?personaId=${personaId}&characterId=${characterId}`;
+      const url = `${API_BASE_URL}/api/chat?personaId=${personaId}&characterId=${characterId}`;
       console.log('🌐 요청 URL:', url);
       
       const response = await corsRequest(url, { method: 'GET' });
@@ -234,7 +234,7 @@ export const useChat = (characterId?: number | string, personaId?: string) => {
         userId: userIdToSend
       });
       
-      const response = await corsRequest(`/api/chat`, {
+      const response = await corsRequest(`${API_BASE_URL}/api/chat`, {
         method: 'POST',
         body: JSON.stringify({ 
           personaId: persId, 
