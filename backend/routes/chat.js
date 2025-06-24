@@ -42,6 +42,7 @@ async function useHearts(userId, amount = 1, description = '채팅', relatedId =
 
 // POST /api/chat - 새로운 메시지 전송
 router.post('/', async (req, res) => {
+  console.time('postChat');
   try {
     const { personaId, characterId, message, userId } = req.body;
 
@@ -83,10 +84,12 @@ router.post('/', async (req, res) => {
     }
 
     // 캐릭터 정보 조회
+    console.time('getCharacter');
     const characters = await executeQuery(
       "SELECT * FROM character_profiles WHERE id = ?",
       [characterId]
     );
+    console.timeEnd('getCharacter');
     if (characters.length === 0) {
       return res.status(404).json({ 
         ok: false, 
@@ -103,10 +106,12 @@ router.post('/', async (req, res) => {
     const persona = personas[0] || {};
 
     // 최근 대화내역 조회 (최신 20개, 오래된 순)
+    console.time('getChatHistory');
     const chatRows = await executeQuery(
       "SELECT sender, message FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt DESC LIMIT 20",
       [personaId, characterId]
     );
+    console.timeEnd('getChatHistory');
     const chatHistory = chatRows.reverse();
 
     // 몰입형 system prompt 생성
@@ -135,6 +140,7 @@ router.post('/', async (req, res) => {
     const favorResult = await processFavorChange(personaId, characterId, message);
 
     // 3. AI 응답 생성
+    console.time('generateAIResponse');
     let aiResponse;
     if (isOpenAIAvailable()) {
       try {
@@ -150,6 +156,7 @@ router.post('/', async (req, res) => {
     } else {
       aiResponse = generateFallbackResponse(character.name, '', message);
     }
+    console.timeEnd('generateAIResponse');
     
     // AI 응답에서도 호감도 관련 키워드 필터링
     const filteredAiResponse = filterFavorKeywords(aiResponse);
@@ -161,10 +168,12 @@ router.post('/', async (req, res) => {
     );
     
     // 5. 업데이트된 메시지 목록 조회
+    console.time('getUpdatedMessages');
     const updatedMessages = await executeQuery(
       "SELECT * FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT 100",
       [personaId, characterId]
     );
+    console.timeEnd('getUpdatedMessages');
     
     res.json({ 
       ok: true, 
@@ -174,15 +183,18 @@ router.post('/', async (req, res) => {
       favorChange: favorResult.favorChange,
       previousFavor: favorResult.previousFavor || 0
     });
+    console.timeEnd('postChat');
 
   } catch (error) {
     console.error("POST /chat error:", error);
+    console.timeEnd('postChat');
     res.status(500).json({ ok: false, error: error.message });
   }
 });
 
 // GET /api/chat - 채팅 히스토리 조회
 router.get('/', async (req, res) => {
+  console.time('getChat');
   const { personaId, characterId } = req.query;
 
   if (!personaId || !characterId) {
@@ -199,10 +211,20 @@ router.get('/', async (req, res) => {
     }
     
     // 메시지 조회
+    console.time('getMessages');
+    
+    // 성능 분석을 위한 EXPLAIN 쿼리
+    const explainMessages = await executeQuery(
+      "EXPLAIN SELECT * FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT 100",
+      [personaId, characterId]
+    );
+    console.log('🔍 Get Messages Query EXPLAIN:', JSON.stringify(explainMessages, null, 2));
+    
     const messages = await executeQuery(
       "SELECT * FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT 100",
       [personaId, characterId]
     );
+    console.timeEnd('getMessages');
     
     // 현재 호감도 조회
     const currentFavor = await getFavor(personaId, characterId);
@@ -212,15 +234,18 @@ router.get('/', async (req, res) => {
       messages, 
       favor: currentFavor 
     });
+    console.timeEnd('getChat');
     
   } catch (error) {
     console.error("GET /chat error:", error);
+    console.timeEnd('getChat');
     res.status(500).json({ ok: false, error: error.message });
   }
 });
 
 // GET /api/chat/list - 채팅 목록 조회 (새로 추가)
 router.get('/list', async (req, res) => {
+  console.time('getChatList');
   const { userId } = req.query;
   
   if (!userId) {
@@ -232,6 +257,31 @@ router.get('/list', async (req, res) => {
 
   try {
     // 사용자의 채팅 목록을 조회 (최신 메시지와 함께)
+    console.time('getChatListQuery');
+    
+    // 성능 분석을 위한 EXPLAIN 쿼리
+    const explainResult = await executeQuery(`
+      EXPLAIN SELECT 
+        c.characterId,
+        c.personaId,
+        cp.name,
+        cp.profileImg,
+        p.name as personaName,
+        p.avatar as personaAvatar,
+        (SELECT message FROM chats c2 
+         WHERE c2.characterId = c.characterId AND c2.personaId = c.personaId 
+         ORDER BY c2.createdAt DESC LIMIT 1) as lastMessage,
+        MAX(c.createdAt) as lastChatTime
+      FROM chats c
+      LEFT JOIN character_profiles cp ON c.characterId = cp.id
+      LEFT JOIN personas p ON c.personaId = p.id
+      WHERE p.userId = ?
+      GROUP BY c.characterId, c.personaId
+      ORDER BY lastChatTime DESC
+      LIMIT 20
+    `, [userId]);
+    console.log('🔍 Chat List Query EXPLAIN:', JSON.stringify(explainResult, null, 2));
+    
     const chats = await executeQuery(`
       SELECT 
         c.characterId,
@@ -252,10 +302,13 @@ router.get('/list', async (req, res) => {
       ORDER BY lastChatTime DESC
       LIMIT 20
     `, [userId]);
+    console.timeEnd('getChatListQuery');
     
     res.json({ ok: true, chats });
+    console.timeEnd('getChatList');
   } catch (error) {
     console.error('Chat list 조회 에러:', error);
+    console.timeEnd('getChatList');
     res.status(500).json({ 
       ok: false, 
       error: '채팅 목록을 불러올 수 없습니다.',

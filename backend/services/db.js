@@ -11,14 +11,9 @@ const DB_CONFIG = {
   connectionLimit: 20,
   waitForConnections: true,
   queueLimit: 0,
-  acquireTimeout: 10000,
-  timeout: 10000,
-  reconnect: true,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-  // 성능 최적화 설정
-  multipleStatements: false,
-  keepAliveInitialDelay: 0,
-  enableKeepAlive: true
+  // MySQL2 호환 성능 최적화 설정
+  multipleStatements: false
 };
 
 let pool = null;

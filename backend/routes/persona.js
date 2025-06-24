@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 
 // GET /api/persona - 페르소나 목록 조회
 router.get('/', async (req, res) => {
+  console.time('getPersonas');
   const { userId } = req.query;
   
   if (!userId) {
@@ -15,14 +16,18 @@ router.get('/', async (req, res) => {
   }
 
   try {
+    console.time('getPersonasQuery');
     const personas = await executeQuery(
       'SELECT * FROM personas WHERE userId = ? ORDER BY createdAt DESC',
       [userId]
     );
+    console.timeEnd('getPersonasQuery');
 
     res.json({ ok: true, personas });
+    console.timeEnd('getPersonas');
   } catch (error) {
     console.error('Persona 조회 에러:', error);
+    console.timeEnd('getPersonas');
     res.status(500).json({ 
       ok: false, 
       error: '페르소나 데이터를 불러올 수 없습니다.',

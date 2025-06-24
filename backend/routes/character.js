@@ -8,10 +8,12 @@ const MAX_PUBLIC_CHARACTERS = 5;
 
 // GET /api/character - 캐릭터 목록 조회
 router.get('/', async (req, res) => {
+  console.time('getCharacters');
   const { userId } = req.query;
   
   try {
     if (userId) {
+      console.time('getUserCharacters');
       const userCharacters = await executeQueryWithCache(
         `SELECT id, profileImg, name, age, job, oneLiner, category, tags, attachments, likes, dislikes, firstScene, firstMessage, backgroundImg 
          FROM character_profiles WHERE userId = ? ORDER BY createdAt DESC LIMIT ${MAX_USER_CHARACTERS}`,
@@ -19,10 +21,12 @@ router.get('/', async (req, res) => {
         `user_characters_${userId}`,
         60000 // 1분 캐시
       );
+      console.timeEnd('getUserCharacters');
 
       res.json({ ok: true, characters: userCharacters || [], type: 'user_characters' });
       
     } else {
+      console.time('getPublicCharacters');
       const publicCharacters = await executeQueryWithCache(
         `SELECT id, profileImg, name, age, job, oneLiner, tags, attachments, likes, dislikes, firstScene, firstMessage, backgroundImg 
          FROM character_profiles WHERE scope = '공개' ORDER BY RAND() LIMIT ${MAX_PUBLIC_CHARACTERS}`,
@@ -30,12 +34,15 @@ router.get('/', async (req, res) => {
         'public_characters',
         300000 // 5분 캐시
       );
+      console.timeEnd('getPublicCharacters');
 
       res.json({ ok: true, characters: publicCharacters || [], type: 'public_characters' });
     }
+    console.timeEnd('getCharacters');
     
   } catch (error) {
     console.error('Character 조회 에러:', error.message);
+    console.timeEnd('getCharacters');
     res.status(500).json({ 
       ok: false, 
       error: "캐릭터 데이터를 불러올 수 없습니다.",

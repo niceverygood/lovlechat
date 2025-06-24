@@ -144,7 +144,7 @@ async function getFavor(personaId, characterId) {
     
     // 없으면 기본값 0으로 생성
     await executeMutation(
-      'INSERT INTO character_favors (personaId, characterId, favor, createdAt) VALUES (?, ?, 0, NOW())',
+      'INSERT INTO character_favors (personaId, characterId, favor) VALUES (?, ?, 0)',
       [personaId, characterId]
     );
     
@@ -161,9 +161,9 @@ async function getFavor(personaId, characterId) {
 async function updateFavor(personaId, characterId, newFavor) {
   try {
     await executeMutation(
-      `INSERT INTO character_favors (personaId, characterId, favor, createdAt, updatedAt) 
-       VALUES (?, ?, ?, NOW(), NOW())
-       ON DUPLICATE KEY UPDATE favor = ?, updatedAt = NOW()`,
+      `INSERT INTO character_favors (personaId, characterId, favor) 
+       VALUES (?, ?, ?)
+       ON DUPLICATE KEY UPDATE favor = ?`,
       [personaId, characterId, newFavor, newFavor]
     );
     
