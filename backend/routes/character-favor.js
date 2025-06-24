@@ -14,22 +14,38 @@ router.get('/', async (req, res) => {
   }
 
   try {
-    // 좋아요한 캐릭터 ID 목록 조회
-    const favoriteIds = await executeQuery(
-      'SELECT characterId FROM character_favors WHERE userId = ?',
+    // N+1 쿼리 문제 해결: 2개 쿼리를 JOIN으로 1개 쿼리로 최적화
+    const favoriteCharacters = await executeQuery(
+      `SELECT 
+        cf.characterId,
+        cp.id, 
+        cp.name, 
+        cp.profileImg, 
+        cp.age, 
+        cp.job, 
+        cp.oneLiner, 
+        cp.category, 
+        cp.tags, 
+        cp.backgroundImg
+       FROM character_favors cf
+       INNER JOIN character_profiles cp ON cf.characterId = cp.id
+       WHERE cf.userId = ?
+       ORDER BY cf.createdAt DESC`,
       [userId]
     );
 
-    const liked = favoriteIds.map(f => f.characterId);
-
-    // 좋아요한 캐릭터 상세 정보 조회
-    const characters = favoriteIds.length > 0 ? await executeQuery(
-      `SELECT id, name, profileImg, age, job, oneLiner, category, tags, backgroundImg
-       FROM character_profiles 
-       WHERE id IN (${favoriteIds.map(() => '?').join(',')})
-       ORDER BY FIELD(id, ${favoriteIds.map(() => '?').join(',')})`,
-      [...favoriteIds.map(f => f.characterId), ...favoriteIds.map(f => f.characterId)]
-    ) : [];
+    const liked = favoriteCharacters.map(c => c.characterId);
+    const characters = favoriteCharacters.map(c => ({
+      id: c.id,
+      name: c.name,
+      profileImg: c.profileImg,
+      age: c.age,
+      job: c.job,
+      oneLiner: c.oneLiner,
+      category: c.category,
+      tags: c.tags,
+      backgroundImg: c.backgroundImg
+    }));
 
     res.json({ 
       ok: true, 

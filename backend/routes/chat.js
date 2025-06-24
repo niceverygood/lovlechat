@@ -259,7 +259,7 @@ router.get('/list', async (req, res) => {
     // 사용자의 채팅 목록을 조회 (최신 메시지와 함께)
     console.time('getChatListQuery');
     
-    // 성능 분석을 위한 EXPLAIN 쿼리
+    // 성능 분석을 위한 EXPLAIN 쿼리 (JOIN 최적화 버전)
     const explainResult = await executeQuery(`
       EXPLAIN SELECT 
         c.characterId,
@@ -268,20 +268,28 @@ router.get('/list', async (req, res) => {
         cp.profileImg,
         p.name as personaName,
         p.avatar as personaAvatar,
-        (SELECT message FROM chats c2 
-         WHERE c2.characterId = c.characterId AND c2.personaId = c.personaId 
-         ORDER BY c2.createdAt DESC LIMIT 1) as lastMessage,
-        MAX(c.createdAt) as lastChatTime
-      FROM chats c
+        cm.message as lastMessage,
+        c.lastChatTime
+      FROM (
+        SELECT 
+          characterId,
+          personaId,
+          MAX(createdAt) as lastChatTime
+        FROM chats
+        GROUP BY characterId, personaId
+      ) c
       LEFT JOIN character_profiles cp ON c.characterId = cp.id
       LEFT JOIN personas p ON c.personaId = p.id
+      LEFT JOIN chats cm ON c.characterId = cm.characterId 
+                         AND c.personaId = cm.personaId 
+                         AND c.lastChatTime = cm.createdAt
       WHERE p.userId = ?
-      GROUP BY c.characterId, c.personaId
-      ORDER BY lastChatTime DESC
+      ORDER BY c.lastChatTime DESC
       LIMIT 20
     `, [userId]);
     console.log('🔍 Chat List Query EXPLAIN:', JSON.stringify(explainResult, null, 2));
     
+    // N+1 쿼리 문제 해결: 서브쿼리를 JOIN으로 최적화
     const chats = await executeQuery(`
       SELECT 
         c.characterId,
@@ -290,16 +298,23 @@ router.get('/list', async (req, res) => {
         cp.profileImg,
         p.name as personaName,
         p.avatar as personaAvatar,
-        (SELECT message FROM chats c2 
-         WHERE c2.characterId = c.characterId AND c2.personaId = c.personaId 
-         ORDER BY c2.createdAt DESC LIMIT 1) as lastMessage,
-        MAX(c.createdAt) as lastChatTime
-      FROM chats c
+        cm.message as lastMessage,
+        c.lastChatTime
+      FROM (
+        SELECT 
+          characterId,
+          personaId,
+          MAX(createdAt) as lastChatTime
+        FROM chats
+        GROUP BY characterId, personaId
+      ) c
       LEFT JOIN character_profiles cp ON c.characterId = cp.id
       LEFT JOIN personas p ON c.personaId = p.id
+      LEFT JOIN chats cm ON c.characterId = cm.characterId 
+                         AND c.personaId = cm.personaId 
+                         AND c.lastChatTime = cm.createdAt
       WHERE p.userId = ?
-      GROUP BY c.characterId, c.personaId
-      ORDER BY lastChatTime DESC
+      ORDER BY c.lastChatTime DESC
       LIMIT 20
     `, [userId]);
     console.timeEnd('getChatListQuery');
