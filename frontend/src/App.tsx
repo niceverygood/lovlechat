@@ -12,6 +12,7 @@ import ForYouPage from './pages/ForYouPage';
 import MyPage from './pages/MyPage';
 import CharacterDetailPage from './pages/CharacterDetailPage';
 import HeartShopPage from './pages/HeartShopPage';
+import MonitoringDashboard from './pages/MonitoringDashboard';
 import { setGuestMode, clearGuestMode } from './utils/guestMode';
 
 function AppContent() {
@@ -124,6 +125,14 @@ function AppContent() {
           </ProtectedRoute>
         }
       />
+
+      {/* 모니터링 대시보드 - 개발환경에서만 접근 가능 */}
+      {(process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') && (
+        <Route 
+          path="/monitoring" 
+          element={<MonitoringDashboard />}
+        />
+      )}
       
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

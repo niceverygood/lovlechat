@@ -8,6 +8,7 @@ import ProfileDetailModal from "../components/ProfileDetailModal";
 import { signOutUser } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useHearts } from "../hooks/useHearts";
+import { useMyInfo, clearMyInfoCache } from "../hooks/useMyInfo";
 import { apiGet, apiPost, apiPut, apiDelete } from '../lib/api';
 import CustomAlert from '../components/CustomAlert';
 import { DEFAULT_PROFILE_IMAGE, handleProfileImageError } from '../utils/constants';
@@ -71,8 +72,8 @@ export default function MyPage() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const { hearts, loading: heartsLoading } = useHearts(user?.uid || null);
+  const { data: myInfoData, stats, loading: myInfoLoading, error: myInfoError, refetch: refetchMyInfo } = useMyInfo(user?.uid || null);
   const [characters, setCharacters] = useState<Character[]>([]);
-  const [personas, setPersonas] = useState<Persona[]>([]);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showUserProfileEditModal, setShowUserProfileEditModal] = useState(false);
   const [showProfileEditModal, setShowProfileEditModal] = useState(false);
@@ -92,6 +93,9 @@ export default function MyPage() {
   const [alertTitle, setAlertTitle] = useState('');
   const [loading, setLoading] = useState(true);
 
+  // MyInfo에서 페르소나 데이터 가져오기
+  const personas = myInfoData?.personas || [];
+
   useEffect(() => {
     // Wait for auth to finish loading
     if (authLoading) {
@@ -103,41 +107,36 @@ export default function MyPage() {
       setLoading(false);
       return;
     }
-    console.log('MyPage 데이터 로딩 시작, userId:', userId);
+    console.log('MyPage 캐릭터 데이터 로딩 시작, userId:', userId);
     setLoading(true);
-    Promise.all([
-      apiGet(`/api/persona?userId=${userId}`),
-      apiGet(`/api/character?userId=${userId}`)
-    ]).then(([personaData, characterData]) => {
-      console.log('API 응답 - personaData:', personaData);
-      console.log('API 응답 - characterData:', characterData);
-      
-      if (personaData.ok) {
-        console.log('페르소나 설정:', personaData.personas);
-        setPersonas(personaData.personas || []);
-      }
-      if (characterData.ok) {
-        console.log('캐릭터 설정:', characterData.characters);
-        const charactersWithTags = characterData.characters.map((char: any) => ({
-          ...char,
-          selectedTags: Array.isArray(char.tags)
-            ? char.tags
-            : (typeof char.tags === 'string' && char.tags.startsWith('['))
-              ? JSON.parse(char.tags)
-              : (typeof char.tags === 'string' && char.tags.length > 0)
-                ? char.tags.split(',').map((t: string) => t.trim())
-                : [],
-        }));
-        setCharacters(charactersWithTags);
-      }
-      setLoading(false);
-    }).catch(error => {
-      console.error('데이터 로딩 오류:', error);
-      setLoading(false);
-      setAlertTitle('오류');
-      setAlertMsg('데이터를 불러오는 중 오류가 발생했습니다.');
-      setAlertOpen(true);
-    });
+    // 캐릭터 데이터만 별도로 로딩 (페르소나는 useMyInfo에서 관리)
+    apiGet(`/api/character?userId=${userId}`)
+      .then((characterData) => {
+        console.log('API 응답 - characterData:', characterData);
+        
+        if (characterData.ok) {
+          console.log('캐릭터 설정:', characterData.characters);
+          const charactersWithTags = characterData.characters.map((char: any) => ({
+            ...char,
+            selectedTags: Array.isArray(char.tags)
+              ? char.tags
+              : (typeof char.tags === 'string' && char.tags.startsWith('['))
+                ? JSON.parse(char.tags)
+                : (typeof char.tags === 'string' && char.tags.length > 0)
+                  ? char.tags.split(',').map((t: string) => t.trim())
+                  : [],
+          }));
+          setCharacters(charactersWithTags);
+        }
+        setLoading(false);
+      })
+      .catch(error => {
+        console.error('캐릭터 데이터 로딩 오류:', error);
+        setLoading(false);
+        setAlertTitle('오류');
+        setAlertMsg('캐릭터 데이터를 불러오는 중 오류가 발생했습니다.');
+        setAlertOpen(true);
+      });
 
     // 사용자 프로필 정보 불러오기 (localStorage에서)
     const savedUserProfile = localStorage.getItem('userProfile');
@@ -188,18 +187,10 @@ export default function MyPage() {
     setShowProfileEditModal(true);
   };
 
-  // 멀티프로필 목록 최신화 함수
+  // 멀티프로필 목록 최신화 함수 (useMyInfo 사용)
   const fetchPersonas = async () => {
     try {
-      const data = await apiGet(`/api/persona?userId=${userId}`);
-      console.log('fetchPersonas 응답:', data); // 디버깅용
-      
-      if (data.ok) {
-        // Persona는 순수하게 User가 생성한 멀티프로필만 관리
-        setPersonas(data.personas || []);
-      } else {
-        console.error('페르소나 조회 실패:', data.error);
-      }
+      await refetchMyInfo();
     } catch (error) {
       console.error('fetchPersonas 에러:', error);
     }
@@ -265,7 +256,7 @@ export default function MyPage() {
 
   return (
     <div style={{ background: "var(--color-bg)", minHeight: "100vh", paddingBottom: 80 }}>
-      {loading ? (
+      {(loading || myInfoLoading) ? (
         <div style={{ 
           display: 'flex', 
           justifyContent: 'center', 
@@ -276,6 +267,34 @@ export default function MyPage() {
           fontWeight: 600
         }}>
           데이터를 불러오는 중...
+        </div>
+      ) : myInfoError ? (
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          minHeight: '50vh',
+          color: '#ff4081',
+          fontSize: 18,
+          fontWeight: 600,
+          flexDirection: 'column',
+          gap: 16
+        }}>
+          <div>사용자 정보를 불러올 수 없습니다</div>
+          <button 
+            onClick={() => refetchMyInfo()}
+            style={{
+              background: '#ff4081',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 12,
+              padding: '12px 24px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            다시 시도
+          </button>
         </div>
       ) : (
         <>
@@ -362,7 +381,7 @@ export default function MyPage() {
                 onClick={async () => {
                   if (window.confirm("정말로 삭제하시겠습니까?")) {
                     await apiDelete(`/api/persona/${p.id}`);
-                    setPersonas(prev => prev.filter(x => x.id !== p.id));
+                    await refetchMyInfo(); // 삭제 후 MyInfo 새로고침
                   }
                 }}
               >삭제</button>

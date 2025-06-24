@@ -3,6 +3,8 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const { cacheService } = require('./services/cache');
+const { router: monitoringRouter, monitoringMiddleware } = require('./routes/monitoring');
 require('dotenv').config();
 
 const app = express();
@@ -35,6 +37,9 @@ app.use(limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// 모니터링 미들웨어 (모든 API 요청 추적)
+app.use('/api', monitoringMiddleware);
+
 // Routes
 app.use('/api/character', require('./routes/character'));
 app.use('/api/character', require('./routes/character-id'));
@@ -49,14 +54,35 @@ app.use('/api/myinfo', require('./routes/myinfo'));
 app.use('/api/payment', require('./routes/payment'));
 app.use('/api/deploy', require('./routes/deploy'));
 app.use('/api/test-db', require('./routes/test-db'));
+app.use('/api/monitoring', monitoringRouter);
 
 // Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+  const cache = await cacheService.healthCheck();
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    cache 
+  });
 });
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+app.get('/api/health', async (req, res) => {
+  const cache = await cacheService.healthCheck();
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    cache 
+  });
+});
+
+// 캐시 상태 및 통계
+app.get('/api/cache/stats', async (req, res) => {
+  try {
+    const stats = await cacheService.getStats();
+    res.json({ ok: true, stats });
+  } catch (error) {
+    res.json({ ok: false, error: error.message });
+  }
 });
 
 // Root route
@@ -88,7 +114,42 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 LovleChat Express Backend running on port ${PORT}`);
-  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-}); 
+// Redis 초기화
+const initializeCache = async () => {
+  try {
+    await cacheService.connect();
+  } catch (error) {
+    console.error('캐시 초기화 실패:', error);
+  }
+};
+
+// 서버 시작
+const startServer = async () => {
+  await initializeCache();
+  
+  const server = app.listen(PORT, () => {
+    console.log(`🚀 LovleChat Express Backend running on port ${PORT}`);
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+
+  // 서버 종료 시 Redis 연결 정리
+  const gracefulShutdown = async () => {
+    console.log('\n⚠️ 서버 종료 신호 받음. 정리 중...');
+    
+    try {
+      await cacheService.disconnect();
+      server.close(() => {
+        console.log('✅ 서버 종료 완료');
+        process.exit(0);
+      });
+    } catch (error) {
+      console.error('❌ 서버 종료 중 오류:', error);
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGTERM', gracefulShutdown);
+  process.on('SIGINT', gracefulShutdown);
+};
+
+startServer(); 

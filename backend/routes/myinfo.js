@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { executeQuery } = require('../services/db');
+const { cacheWrapper } = require('../services/cache');
 
 // GET /api/myinfo - 사용자 정보 통합 조회 (user + personas + hearts)
 router.get('/', async (req, res) => {
@@ -18,6 +19,19 @@ router.get('/', async (req, res) => {
   }
 
   try {
+    // 캐시에서 먼저 확인
+    const cachedData = await cacheWrapper.getMyInfo(userId);
+    if (cachedData) {
+      console.log('🚀 MyInfo 캐시 히트:', userId);
+      return res.json({
+        ...cachedData,
+        fromCache: true,
+        responseTime: Date.now() - startTime
+      });
+    }
+
+    console.log('⭕ MyInfo 캐시 미스, DB 조회:', userId);
+
     // 병렬로 모든 데이터 조회
     const [userResult, personasResult, heartsResult] = await Promise.all([
       // 사용자 기본 정보 (Firebase 정보 기반)
@@ -72,13 +86,18 @@ router.get('/', async (req, res) => {
     // 하트 잔액
     const hearts = heartsResult.length > 0 ? heartsResult[0].afterHearts : 100;
 
-    res.json({
+    const responseData = {
       ok: true,
       user,
       personas,
       hearts,
       responseTime: Date.now() - startTime
-    });
+    };
+
+    // 캐시에 저장 (5분)
+    await cacheWrapper.setMyInfo(userId, responseData);
+
+    res.json(responseData);
 
   } catch (error) {
     console.error('MyInfo API 에러:', error);
@@ -109,6 +128,20 @@ router.get('/stats', async (req, res) => {
   }
 
   try {
+    // 캐시에서 먼저 확인
+    const cachedStats = await cacheWrapper.getUserStats(userId);
+    if (cachedStats) {
+      console.log('🚀 MyInfo Stats 캐시 히트:', userId);
+      return res.json({
+        ok: true,
+        stats: cachedStats,
+        fromCache: true,
+        responseTime: Date.now() - startTime
+      });
+    }
+
+    console.log('⭕ MyInfo Stats 캐시 미스, DB 조회:', userId);
+
     // 병렬로 통계 데이터 조회
     const [chatStats, favorStats, heartStats] = await Promise.all([
       // 채팅 통계
@@ -157,6 +190,9 @@ router.get('/stats', async (req, res) => {
       heartsEarned: heartStats[0]?.totalEarned || 0,
       totalTransactions: heartStats[0]?.totalTransactions || 0
     };
+
+    // 캐시에 저장 (15분)
+    await cacheWrapper.setUserStats(userId, stats);
 
     res.json({
       ok: true,

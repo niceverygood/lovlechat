@@ -12,10 +12,39 @@ interface OptimizedImageProps {
   onClick?: () => void;
   onLoad?: () => void;
   onError?: () => void;
+  sizes?: string; // 반응형 이미지 크기
+  priority?: boolean; // 우선순위 로딩
+  quality?: number; // 이미지 품질 (1-100)
 }
 
 // 이미지 캐시 맵 (메모리 최적화)
 const imageCache = new Map<string, boolean>();
+
+// WebP 지원 확인
+const supportsWebP = (() => {
+  if (typeof window === 'undefined') return false;
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = 1;
+  return canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
+})();
+
+// 이미지 URL 최적화 함수
+const optimizeImageUrl = (src: string, quality = 85): string => {
+  // 외부 이미지 서비스 최적화 (예: Vercel Image Optimization)
+  if (src.startsWith('http') && !src.includes('lovlechat')) {
+    // 이미 최적화된 URL이거나 CDN URL인 경우 그대로 반환
+    return src;
+  }
+  
+  // 로컬 이미지의 경우 확장자 확인 후 WebP 변환 제안
+  if (supportsWebP && (src.includes('.jpg') || src.includes('.jpeg') || src.includes('.png'))) {
+    // 실제 서비스에서는 이미지 최적화 서비스 사용
+    return src; // 현재는 원본 반환
+  }
+  
+  return src;
+};
 
 const OptimizedImage = memo(({
   src,
@@ -27,10 +56,14 @@ const OptimizedImage = memo(({
   fallbackSrc = DEFAULT_PROFILE_IMAGE,
   onClick,
   onLoad,
-  onError
+  onError,
+  sizes,
+  priority = false,
+  quality = 85
 }: OptimizedImageProps) => {
-  const [currentSrc, setCurrentSrc] = useState(src);
-  const [isLoading, setIsLoading] = useState(!imageCache.has(src));
+  const optimizedSrc = optimizeImageUrl(src, quality);
+  const [currentSrc, setCurrentSrc] = useState(optimizedSrc);
+  const [isLoading, setIsLoading] = useState(!imageCache.has(optimizedSrc) && !priority);
   const [hasError, setHasError] = useState(false);
 
   const handleLoad = useCallback(() => {
@@ -79,6 +112,7 @@ const OptimizedImage = memo(({
       alt={alt}
       width={width}
       height={height}
+      sizes={sizes}
       className={className}
       style={{
         ...style,
@@ -89,8 +123,9 @@ const OptimizedImage = memo(({
       onLoad={handleLoad}
       onError={handleError}
       onClick={onClick}
-      loading="lazy" // 지연 로딩
+      loading={priority ? "eager" : "lazy"} // 우선순위에 따른 로딩
       decoding="async" // 비동기 디코딩
+      fetchPriority={priority ? "high" : "auto"} // 페치 우선순위
     />
   );
 });
