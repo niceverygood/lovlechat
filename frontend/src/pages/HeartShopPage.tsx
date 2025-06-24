@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useHearts } from "../hooks/useHearts";
 import Toast from "../components/Toast";
-import { API_BASE_URL } from "../lib/openai";
+import { apiPost, API_BASE_URL } from "../lib/api";
 
 // 아임포트 타입 선언
 declare global {
@@ -88,27 +88,13 @@ export default function HeartShopPage() {
             setToast({ message: '결제 검증 중입니다...', type: 'success' });
             
             // 백엔드에 결제 검증 요청
-            const verifyResponse = await fetch(`${API_BASE_URL}/api/payment`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                imp_uid: response.imp_uid,
-                merchant_uid: response.merchant_uid,
-                userId: user.uid,
-                heartCount: totalHearts,
-                price: product.price,
-              }),
+            const verifyData = await apiPost('/api/payment', {
+              imp_uid: response.imp_uid,
+              merchant_uid: response.merchant_uid,
+              userId: user.uid,
+              heartCount: totalHearts,
+              price: product.price,
             });
-
-            console.log('검증 응답 상태:', verifyResponse.status);
-            
-            if (!verifyResponse.ok) {
-              throw new Error(`서버 오류: ${verifyResponse.status}`);
-            }
-
-            const verifyData = await verifyResponse.json();
             console.log('검증 응답 데이터:', verifyData);
 
             if (verifyData.success || verifyData.ok) {

@@ -11,7 +11,7 @@ import CustomAlert from "../components/CustomAlert";
 import Toast from "../components/Toast";
 import ChatInput from "../components/ChatInput";
 import LoginPromptModal from "../components/LoginPromptModal";
-import { API_BASE_URL } from '../lib/openai';
+import { apiGet, apiPost } from '../lib/api';
 import { ChatSkeleton } from "../components/Skeleton";
 import { isGuestMode } from "../utils/guestMode";
 import { DEFAULT_PROFILE_IMAGE } from "../utils/constants";
@@ -131,7 +131,7 @@ export default function ChatPage() {
   useEffect(() => {
     if (!id) return;
     setCharacterLoading(true);
-    fetch(`${API_BASE_URL}/api/character/${id}`)
+    fetch(`/api/character/${id}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok) setCharacter(data.character);
@@ -151,7 +151,7 @@ export default function ChatPage() {
       
       setIsPersonaLoading(true);
       console.log('Fetching persona:', personaId);
-      fetch(`${API_BASE_URL}/api/persona/${personaId}`)
+      fetch(`/api/persona/${personaId}`)
         .then(res => {
           if (!res.ok) {
             throw new Error(`HTTP error! status: ${res.status}`);
@@ -199,7 +199,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!id || !personaId) return;
-    fetch(`${API_BASE_URL}/api/chat/first-date?personaId=${personaId}&characterId=${id}`)
+    fetch(`/api/chat/first-date?personaId=${personaId}&characterId=${id}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok && data.firstDate) {
@@ -359,7 +359,7 @@ export default function ChatPage() {
   const handleLeaveChat = async () => {
     try {
       // 채팅방 DB 삭제
-      const response = await fetch(`${API_BASE_URL}/api/chat`, {
+      const response = await fetch(`/api/chat`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ personaId, characterId: id })

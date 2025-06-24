@@ -5,7 +5,7 @@ import { FiHeart, FiPlus, FiX } from "react-icons/fi";
 import ProfileEditModal from "../components/ProfileEditModal";
 import { useAuth } from "../hooks/useAuth";
 import { useHearts } from "../hooks/useHearts";
-import { API_BASE_URL } from '../lib/openai';
+import { apiGet, apiPost, apiPut, apiDelete, API_BASE_URL } from '../lib/api';
 import CustomAlert from '../components/CustomAlert';
 import LoginPromptModal from '../components/LoginPromptModal';
 import { isGuestMode, GUEST_LIMITS, getGuestLimitMessage } from '../utils/guestMode';
@@ -40,7 +40,7 @@ interface Persona {
 const DEFAULT_PROFILE_IMG = DEFAULT_PROFILE_IMAGE;
 
 // 좋아요(하트) 상태 관리
-const FAVOR_API = `${API_BASE_URL}/api/character/favor`;
+const FAVOR_API = '/api/character/favor';
 
 function ForYouSkeleton() {
   return (
@@ -240,8 +240,7 @@ export default function ForYouPage() {
   const loadLikedCharacters = async () => {
     if (!userId) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/api/character/favor?userId=${userId}`);
-      const data = await response.json();
+      const data = await apiGet(`/api/character/favor?userId=${userId}`);
       if (data.ok) {
         if (Array.isArray(data.liked)) setLikedCharacters(data.liked);
         if (Array.isArray(data.characters)) setLikedCharacterDetails(data.characters);
@@ -342,7 +341,7 @@ export default function ForYouPage() {
   // 멀티프로필 목록 불러오기 (GET)
   useEffect(() => {
     if (!userId) return;
-    fetch(`${API_BASE_URL}/api/persona?userId=${userId}`)
+    fetch(`/api/persona?userId=${userId}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok && Array.isArray(data.personas)) setPersonas(data.personas);
@@ -368,7 +367,7 @@ export default function ForYouPage() {
         }
       } catch (e) {}
     }
-    fetch(`${API_BASE_URL}/api/character`)
+    fetch(`/api/character`)
       .then(res => res.json())
       .then(data => {
         if (data.ok && Array.isArray(data.characters)) {

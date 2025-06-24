@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { API_BASE_URL } from '../lib/openai';
+import { apiGet, apiPost } from '../lib/api';
 
 interface HeartData {
   hearts: number;
@@ -86,16 +86,10 @@ function setCachedHearts(userId: string, data: HeartData): void {
 
 // 실제 하트 API 호출
 async function fetchHearts(userId: string): Promise<HeartData> {
-  const url = `${API_BASE_URL}/api/hearts?userId=${userId}`;
-  
   console.log(`🔄 하트 API 호출 시작: ${userId}`);
   
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`하트 조회 실패: ${response.status}`);
-  }
+  const data = await apiGet(`/api/hearts?userId=${userId}`);
   
-  const data = await response.json();
   if (!data.ok) {
     throw new Error(data.error || '하트 조회 실패');
   }
@@ -227,24 +221,13 @@ export function useHearts(userId: string | null): UseHeartsReturn {
       console.log(`[하트 차감] userId: ${userId}, amount: ${amount}, before: ${hearts}`);
     }
     try {
-      const response = await fetch(`${API_BASE_URL}/api/hearts`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId,
-          amount: -Math.abs(amount), // 음수로 변환
-          description: description || `하트 사용 (${amount}개)`,
-          relatedId
-        }),
+      const data = await apiPost('/api/hearts', {
+        userId,
+        amount: -Math.abs(amount), // 음수로 변환
+        description: description || `하트 사용 (${amount}개)`,
+        relatedId
       });
 
-      if (!response.ok) {
-        throw new Error(`하트 사용 실패: ${response.status}`);
-      }
-
-      const data = await response.json();
       if (!data.ok) {
         throw new Error(data.error || '하트 사용 실패');
       }

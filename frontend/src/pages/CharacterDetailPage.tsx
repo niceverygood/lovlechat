@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { API_BASE_URL } from '../lib/openai';
+import { apiGet } from '../lib/api';
 import { DEFAULT_PROFILE_IMAGE, handleProfileImageError } from '../utils/constants';
 
 interface Character {
@@ -63,7 +63,7 @@ export default function CharacterDetailPage() {
   const [personas, setPersonas] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/api/character/${id}`)
+    fetch(`/api/character/${id}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok) setCharacter(data.character);
@@ -72,7 +72,7 @@ export default function CharacterDetailPage() {
 
   useEffect(() => {
     if (!user?.uid) return;
-    fetch(`${API_BASE_URL}/api/persona?userId=${user.uid}`)
+    fetch(`/api/persona?userId=${user.uid}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok) setPersonas(data.personas.filter((p: any) => p.id !== user.uid));

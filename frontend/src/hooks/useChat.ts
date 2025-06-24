@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAuth } from './useAuth';
-import { corsRequest, API_BASE_URL } from '../lib/openai';
+import { apiGet, apiPost } from '../lib/api';
 
 // === 타입 정의 ===
 interface Message {
@@ -77,13 +77,9 @@ export const useChat = (characterId?: number | string, personaId?: string) => {
     setState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
-      const url = `${API_BASE_URL}/api/chat?personaId=${personaId}&characterId=${characterId}`;
-      console.log('🌐 요청 URL:', url);
+      console.log('🌐 요청 URL: /api/chat');
       
-      const response = await corsRequest(url, { method: 'GET' });
-      console.log('📡 HTTP 응답 상태:', response.status, response.ok);
-      
-      const data = await response.json();
+      const data = await apiGet(`/api/chat?personaId=${personaId}&characterId=${characterId}`);
       console.log('📦 응답 데이터 원본:', data);
       console.log('📊 메시지 배열 상세 확인:', {
         hasData: !!data,
@@ -234,18 +230,13 @@ export const useChat = (characterId?: number | string, personaId?: string) => {
         userId: userIdToSend
       });
       
-      const response = await corsRequest(`${API_BASE_URL}/api/chat`, {
-        method: 'POST',
-        body: JSON.stringify({ 
-          personaId: persId, 
-          characterId: parseInt(charId),
-          message: message,
-          sender: 'user',
-          userId: userIdToSend
-        })
+      const data = await apiPost('/api/chat', { 
+        personaId: persId, 
+        characterId: parseInt(charId),
+        message: message,
+        sender: 'user',
+        userId: userIdToSend
       });
-      
-      const data = await response.json();
       console.log('📨 메시지 전송 응답:', data);
       
       if (isUnmountedRef.current) return;

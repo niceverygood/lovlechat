@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import { API_BASE_URL } from '../lib/openai';
+import { apiGet, apiPost } from '../lib/api';
 import CustomAlert from './CustomAlert';
 import LoginPromptModal from './LoginPromptModal';
 import { isGuestMode } from '../utils/guestMode';
@@ -23,7 +23,7 @@ export default function ChatList() {
     if (isGuestMode()) {
       // 게스트: 실제 DB 데이터로 채팅목록 5개 생성
       console.log('게스트 모드: 채팅목록 생성 중...');
-      fetch(`${API_BASE_URL}/api/chat/dummy?count=5`)
+      fetch('/api/chat/dummy?count=5')
         .then(res => res.json())
         .then(data => {
           console.log('게스트 채팅목록 데이터:', data);
@@ -34,12 +34,12 @@ export default function ChatList() {
         });
       setPersonas([]);
     } else if (user) {
-      fetch(`${API_BASE_URL}/api/chat/list?userId=${userId}`)
+      fetch(`/api/chat/list?userId=${userId}`)
       .then(res => res.json())
       .then(data => {
         if (data.ok) setChats(data.chats || []);
       });
-      fetch(`${API_BASE_URL}/api/persona?userId=${userId}`)
+      fetch(`/api/persona?userId=${userId}`)
         .then(res => res.json())
         .then(data => {
           if (data.ok) setPersonas(data.personas || []);
@@ -53,7 +53,7 @@ export default function ChatList() {
   // 채팅방 나가기(삭제)
   const handleLeaveChat = async (chat: any) => {
     if (!window.confirm('정말로 이 채팅방을 나가시겠습니까?')) return;
-    await fetch(`${API_BASE_URL}/api/chat`, {
+    await fetch(`/api/chat`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ personaId: chat.personaId, characterId: chat.characterId })

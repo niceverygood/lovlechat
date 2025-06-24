@@ -8,7 +8,7 @@ import ProfileDetailModal from "../components/ProfileDetailModal";
 import { signOutUser } from "../firebase";
 import { useAuth } from "../hooks/useAuth";
 import { useHearts } from "../hooks/useHearts";
-import { API_BASE_URL } from '../lib/openai';
+import { apiGet, apiPost, apiPut, apiDelete } from '../lib/api';
 import CustomAlert from '../components/CustomAlert';
 import { DEFAULT_PROFILE_IMAGE, handleProfileImageError } from '../utils/constants';
 
@@ -106,8 +106,8 @@ export default function MyPage() {
     console.log('MyPage 데이터 로딩 시작, userId:', userId);
     setLoading(true);
     Promise.all([
-      fetch(`${API_BASE_URL}/api/persona?userId=${userId}`).then(res => res.json()),
-      fetch(`${API_BASE_URL}/api/character?userId=${userId}`).then(res => res.json())
+      apiGet(`/api/persona?userId=${userId}`),
+      apiGet(`/api/character?userId=${userId}`)
     ]).then(([personaData, characterData]) => {
       console.log('API 응답 - personaData:', personaData);
       console.log('API 응답 - characterData:', characterData);
@@ -191,8 +191,7 @@ export default function MyPage() {
   // 멀티프로필 목록 최신화 함수
   const fetchPersonas = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/persona?userId=${userId}`);
-      const data = await res.json();
+      const data = await apiGet(`/api/persona?userId=${userId}`);
       console.log('fetchPersonas 응답:', data); // 디버깅용
       
       if (data.ok) {
@@ -208,31 +207,21 @@ export default function MyPage() {
 
   const handleProfileSave = async (updatedProfile: Persona) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/persona/${updatedProfile.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: updatedProfile.name,
-          gender: updatedProfile.gender,
-          age: updatedProfile.age,
-          job: updatedProfile.job,
-          info: updatedProfile.info,
-          habit: updatedProfile.habit,
-          avatar: updatedProfile.avatar
-        }),
+      await apiPut(`/api/persona/${updatedProfile.id}`, {
+        name: updatedProfile.name,
+        gender: updatedProfile.gender,
+        age: updatedProfile.age,
+        job: updatedProfile.job,
+        info: updatedProfile.info,
+        habit: updatedProfile.habit,
+        avatar: updatedProfile.avatar
       });
 
-      if (response.ok) {
-        setShowProfileEditModal(false);
-        await fetchPersonas(); // 최신 목록으로 갱신
-        setAlertTitle('성공');
-        setAlertMsg('프로필이 성공적으로 수정되었습니다.');
-        setAlertOpen(true);
-      } else {
-        throw new Error('프로필 수정에 실패했습니다.');
-      }
+      setShowProfileEditModal(false);
+      await fetchPersonas(); // 최신 목록으로 갱신
+      setAlertTitle('성공');
+      setAlertMsg('프로필이 성공적으로 수정되었습니다.');
+      setAlertOpen(true);
     } catch (error) {
       console.error('프로필 수정 오류:', error);
       setAlertTitle('오류');
@@ -244,37 +233,29 @@ export default function MyPage() {
   // 멀티프로필 생성 핸들러
   const handleProfileCreate = async (newProfile: Persona) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/persona`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          name: newProfile.name,
-          gender: newProfile.gender,
-          age: newProfile.age,
-          job: newProfile.job,
-          info: newProfile.info,
-          habit: newProfile.habit,
-          avatar: newProfile.avatar
-        }),
+      const resData = await apiPost('/api/persona', {
+        userId,
+        name: newProfile.name,
+        gender: newProfile.gender,
+        age: newProfile.age,
+        job: newProfile.job,
+        info: newProfile.info,
+        habit: newProfile.habit,
+        avatar: newProfile.avatar
       });
-      if (response.ok) {
-        const resData = await response.json();
-        console.log('생성된 프로필:', resData);
-        
-        // 모달 먼저 닫기
-        setShowProfileCreateModal(false);
-        
-        // 약간 지연 후 목록 갱신 (UI 안정성)
-        setTimeout(async () => {
-          await fetchPersonas();
-          setAlertTitle('성공');
-          setAlertMsg('프로필이 성공적으로 생성되었습니다.');
-          setAlertOpen(true);
-        }, 100);
-      } else {
-        throw new Error('프로필 생성에 실패했습니다.');
-      }
+      
+      console.log('생성된 프로필:', resData);
+      
+      // 모달 먼저 닫기
+      setShowProfileCreateModal(false);
+      
+      // 약간 지연 후 목록 갱신 (UI 안정성)
+      setTimeout(async () => {
+        await fetchPersonas();
+        setAlertTitle('성공');
+        setAlertMsg('프로필이 성공적으로 생성되었습니다.');
+        setAlertOpen(true);
+      }, 100);
     } catch (error) {
       setAlertTitle('오류');
       setAlertMsg('프로필 생성 중 오류가 발생했습니다.');
@@ -380,7 +361,7 @@ export default function MyPage() {
                 style={{ color: "#ff4081", background: "none", border: "none", fontSize: 16, cursor: "pointer", marginLeft: 8 }}
                 onClick={async () => {
                   if (window.confirm("정말로 삭제하시겠습니까?")) {
-                    await fetch(`${API_BASE_URL}/api/persona/${p.id}`, { method: "DELETE" });
+                    await apiDelete(`/api/persona/${p.id}`);
                     setPersonas(prev => prev.filter(x => x.id !== p.id));
                   }
                 }}
@@ -411,10 +392,9 @@ export default function MyPage() {
                     style={{ color: "#ff4081", background: "none", border: "none", fontSize: 16, cursor: "pointer" }}
                     onClick={async () => {
                       if (window.confirm("정말로 삭제하시겠습니까?")) {
-                        await fetch(`${API_BASE_URL}/api/character/${char.id}?userId=${userId}`, { method: "DELETE" });
+                        await apiDelete(`/api/character/${char.id}?userId=${userId}`);
                         // 삭제(숨김) 후 목록을 서버에서 다시 fetch
-                        const res = await fetch(`${API_BASE_URL}/api/character?userId=${userId}`);
-                        const data = await res.json();
+                        const data = await apiGet(`/api/character?userId=${userId}`);
                         if (data.ok) setCharacters(data.characters);
                       }
                     }}
@@ -623,26 +603,11 @@ export default function MyPage() {
           characterData={selectedCharacter}
           onSave={async (updated: Character) => {
             try {
-              const response = await fetch(`${API_BASE_URL}/api/character/${updated.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updated)
-              });
-              if (!response.ok) {
-                const text = await response.text();
-                let data;
-                try {
-                  data = text ? JSON.parse(text) : {};
-                } catch (e) {
-                  data = {};
-                }
-                throw new Error(data.error || '저장에 실패했습니다.');
-              }
+              await apiPut(`/api/character/${updated.id}`, updated);
               setShowCharacterEditModal(false);
               setSelectedCharacter(null);
               // 목록 갱신
-              const res = await fetch(`${API_BASE_URL}/api/character?userId=${userId}`);
-              const data = await res.json();
+              const data = await apiGet(`/api/character?userId=${userId}`);
               if (data.ok) setCharacters(data.characters);
             } catch (error: any) {
               setAlertTitle('오류');

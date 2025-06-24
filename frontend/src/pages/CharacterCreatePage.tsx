@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import DefaultProfileImage from "../components/DefaultProfileImage";
 import Toast from "../components/Toast";
 import { useAuth } from "../hooks/useAuth";
-import { API_BASE_URL } from '../lib/openai';
+import { apiPost } from '../lib/api';
 import { DEFAULT_PROFILE_IMAGE } from '../utils/constants';
 
 const hashtags = [
@@ -156,7 +156,7 @@ export default function CharacterCreatePage() {
         backgroundImg,
       };
       
-      const response = await fetch(`${API_BASE_URL}/api/character`, {
+      const response = await fetch(`/api/character`, {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
