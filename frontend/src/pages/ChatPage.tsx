@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { useChat } from "../hooks/useChat";
 import { useAuth } from "../hooks/useAuth";
 import { useHearts } from "../hooks/useHearts";
 import MessageBubble from "../components/MessageBubble";
+import OptimizedImage from "../components/OptimizedImage";
 import ProfileDetailModal from "../components/ProfileDetailModal";
 import FavorDetailModal from "../components/FavorDetailModal";
 import FavorBubble from "../components/FavorBubble";
@@ -305,7 +306,7 @@ export default function ChatPage() {
     prevMessageCountRef.current = messages?.length || 0;
   }, [messages]);
 
-  const handleProfileClick = (profile: {
+  const handleProfileClick = useCallback((profile: {
     id: string;
     name: string;
     avatar: string;
@@ -317,7 +318,7 @@ export default function ChatPage() {
   }) => {
     setSelectedProfile(profile);
     setShowProfileModal(true);
-  };
+  }, []);
 
   // 프로필 모달이 열릴 때 character가 있으면 항상 character를 선택
   useEffect(() => {
@@ -341,7 +342,7 @@ export default function ChatPage() {
   }, [showProfileModal, character, selectedProfile]);
 
   // 게스트 모드에서 메시지 전송 제한
-  const handleSendMessage = async (message: string) => {
+  const handleSendMessage = useCallback(async (message: string) => {
     if (isGuestMode()) {
       console.log('게스트 모드 메시지 전송:', { guestMessageCount, message });
       
@@ -354,7 +355,7 @@ export default function ChatPage() {
     // 일반 메시지 전송 후 하트 잔액 갱신
     await sendMessage(message);
     await refreshHearts();
-  };
+  }, [guestMessageCount, sendMessage, refreshHearts]);
 
   const handleLeaveChat = async () => {
     try {
