@@ -105,10 +105,10 @@ router.post('/', async (req, res) => {
     );
     const persona = personas[0] || {};
 
-    // 최근 대화내역 조회 (최신 20개, 오래된 순)
+    // 최근 대화내역 조회 (최신 20개, 오래된 순) - 필요한 컬럼만 선택
     console.time('getChatHistory');
     const chatRows = await executeQuery(
-      "SELECT sender, message FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt DESC LIMIT 20",
+      "SELECT id, sender, message, createdAt FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt DESC LIMIT 20",
       [personaId, characterId]
     );
     console.timeEnd('getChatHistory');
@@ -167,10 +167,10 @@ router.post('/', async (req, res) => {
       [personaId, characterId, filteredAiResponse]
     );
     
-    // 5. 업데이트된 메시지 목록 조회
+    // 5. 업데이트된 메시지 목록 조회 - 필요한 컬럼만 선택하고 페이징 적용
     console.time('getUpdatedMessages');
     const updatedMessages = await executeQuery(
-      "SELECT * FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT 100",
+      "SELECT id, sender, message, createdAt FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT 50",
       [personaId, characterId]
     );
     console.timeEnd('getUpdatedMessages');
@@ -192,10 +192,10 @@ router.post('/', async (req, res) => {
   }
 });
 
-// GET /api/chat - 채팅 히스토리 조회
+// GET /api/chat - 채팅 히스토리 조회 (페이징 지원)
 router.get('/', async (req, res) => {
   console.time('getChat');
-  const { personaId, characterId } = req.query;
+  const { personaId, characterId, page = 1, limit = 50 } = req.query;
 
   if (!personaId || !characterId) {
     return res.status(400).json({ 
@@ -203,6 +203,10 @@ router.get('/', async (req, res) => {
       error: "personaId and characterId are required" 
     });
   }
+
+  const pageNum = parseInt(page);
+  const limitNum = Math.min(parseInt(limit), 100); // 최대 100개로 제한
+  const offset = (pageNum - 1) * limitNum;
 
   try {
     // 게스트 모드 처리
@@ -213,18 +217,25 @@ router.get('/', async (req, res) => {
     // 메시지 조회
     console.time('getMessages');
     
-    // 성능 분석을 위한 EXPLAIN 쿼리
+    // 성능 분석을 위한 EXPLAIN 쿼리 - 페이징 적용
     const explainMessages = await executeQuery(
-      "EXPLAIN SELECT * FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT 100",
-      [personaId, characterId]
+      "EXPLAIN SELECT id, sender, message, createdAt FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT ? OFFSET ?",
+      [personaId, characterId, limitNum, offset]
     );
     console.log('🔍 Get Messages Query EXPLAIN:', JSON.stringify(explainMessages, null, 2));
     
     const messages = await executeQuery(
-      "SELECT * FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT 100",
-      [personaId, characterId]
+      "SELECT id, sender, message, createdAt FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT ? OFFSET ?",
+      [personaId, characterId, limitNum, offset]
     );
     console.timeEnd('getMessages');
+    
+    // 전체 메시지 개수 조회 (페이징 정보용)
+    const totalCountResult = await executeQuery(
+      "SELECT COUNT(*) as total FROM chats WHERE personaId = ? AND characterId = ?",
+      [personaId, characterId]
+    );
+    const totalMessages = totalCountResult[0].total;
     
     // 현재 호감도 조회
     const currentFavor = await getFavor(personaId, characterId);
@@ -232,7 +243,15 @@ router.get('/', async (req, res) => {
     res.json({ 
       ok: true, 
       messages, 
-      favor: currentFavor 
+      favor: currentFavor,
+      pagination: {
+        currentPage: pageNum,
+        totalPages: Math.ceil(totalMessages / limitNum),
+        totalMessages,
+        limit: limitNum,
+        hasNextPage: pageNum * limitNum < totalMessages,
+        hasPrevPage: pageNum > 1
+      }
     });
     console.timeEnd('getChat');
     
