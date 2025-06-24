@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../services/db');
-const cache = require('../services/cache');
+const { cacheService } = require('../services/cache');
 
 // 채팅방 통합 정보 조회 API
 router.get('/:characterId', async (req, res) => {
@@ -20,7 +20,7 @@ router.get('/:characterId', async (req, res) => {
     const cacheKey = `chatroom:${characterId}:${personaId}:${userId || 'guest'}`;
     
     // 캐시 확인
-    const cachedData = await cache.get(cacheKey);
+    const cachedData = await cacheService.get(cacheKey);
     if (cachedData) {
       console.log(`✅ 채팅방 정보 캐시 히트: ${cacheKey}`);
       return res.json({
@@ -157,7 +157,7 @@ router.get('/:characterId', async (req, res) => {
     };
 
     // 캐시 저장 (3분)
-    await cache.set(cacheKey, result, 180);
+    await cacheService.set(cacheKey, result, 180);
 
     res.json({
       ok: true,
@@ -183,7 +183,7 @@ router.delete('/cache/:characterId', async (req, res) => {
     const { personaId, userId } = req.query;
     
     const cacheKey = `chatroom:${characterId}:${personaId}:${userId || 'guest'}`;
-    await cache.del(cacheKey);
+    await cacheService.del(cacheKey);
     
     res.json({
       ok: true,
