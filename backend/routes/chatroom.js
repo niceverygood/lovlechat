@@ -40,7 +40,7 @@ router.get('/:characterId', async (req, res) => {
       heartsResult
     ] = await Promise.all([
       // 1. 캐릭터 정보
-      executeQuery('SELECT * FROM characters WHERE id = ?', [characterId]),
+      executeQuery('SELECT * FROM character_profiles WHERE id = ?', [characterId]),
       
       // 2. 페르소나 정보 (게스트가 아닌 경우에만)
       personaId !== 'guest' 
@@ -52,7 +52,7 @@ router.get('/:characterId', async (req, res) => {
         SELECT c.*, ch.name as characterName, ch.profileImg as characterProfileImg, 
                ch.age as characterAge, ch.job as characterJob, p.avatar
         FROM chats c
-        LEFT JOIN characters ch ON c.characterId = ch.id
+        LEFT JOIN character_profiles ch ON c.characterId = ch.id
         LEFT JOIN personas p ON c.personaId = p.id
         WHERE c.characterId = ? AND c.personaId = ?
         ORDER BY c.createdAt DESC
