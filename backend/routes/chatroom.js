@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../services/db');
+const { executeQuery } = require('../services/db');
 const { cacheService } = require('../services/cache');
 
 // 채팅방 통합 정보 조회 API
@@ -40,15 +40,15 @@ router.get('/:characterId', async (req, res) => {
       heartsResult
     ] = await Promise.all([
       // 1. 캐릭터 정보
-      db.query('SELECT * FROM characters WHERE id = ?', [characterId]),
+      executeQuery('SELECT * FROM characters WHERE id = ?', [characterId]),
       
       // 2. 페르소나 정보 (게스트가 아닌 경우에만)
       personaId !== 'guest' 
-        ? db.query('SELECT * FROM personas WHERE id = ?', [personaId])
+        ? executeQuery('SELECT * FROM personas WHERE id = ?', [personaId])
         : Promise.resolve([null]),
       
       // 3. 최근 메시지 (20개)
-      db.query(`
+      executeQuery(`
         SELECT c.*, ch.name as characterName, ch.profileImg as characterProfileImg, 
                ch.age as characterAge, ch.job as characterJob, p.avatar
         FROM chats c
@@ -60,7 +60,7 @@ router.get('/:characterId', async (req, res) => {
       `, [characterId, personaId]),
       
       // 4. 첫 만남 날짜
-      db.query(`
+      executeQuery(`
         SELECT MIN(createdAt) as firstDate 
         FROM chats 
         WHERE characterId = ? AND personaId = ?
@@ -68,7 +68,7 @@ router.get('/:characterId', async (req, res) => {
       
       // 5. 하트 잔액 (userId가 있는 경우에만)
       userId 
-        ? db.query('SELECT hearts FROM users WHERE uid = ?', [userId])
+        ? executeQuery('SELECT hearts FROM users WHERE uid = ?', [userId])
         : Promise.resolve([{ hearts: 0 }])
     ]);
 
@@ -110,7 +110,7 @@ router.get('/:characterId', async (req, res) => {
     // 호감도 조회 (캐릭터에 설정된 호감도)
     let favor = 0;
     try {
-      const favorResult = await db.query(`
+      const favorResult = await executeQuery(`
         SELECT favor FROM chats 
         WHERE characterId = ? AND personaId = ? 
         ORDER BY createdAt DESC 
