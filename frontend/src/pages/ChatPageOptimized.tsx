@@ -503,11 +503,19 @@ export default function ChatPageOptimized() {
 
       {/* 더보기 모달 */}
       {showMoreModal && (
-        <CustomAlert
-          open={showMoreModal}
-          onClose={() => setShowMoreModal(false)}
-          title="채팅방 설정"
-          children={
+        <div style={{
+          position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', 
+          background: 'rgba(0,0,0,0.65)', zIndex: 4000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: '#19181b', borderRadius: 28, minWidth: 320, maxWidth: 380, 
+            padding: '40px 32px 32px 32px',
+            boxShadow: '0 4px 32px rgba(0,0,0,0.18)', textAlign: 'center'
+          }}>
+            <div style={{ fontWeight: 700, fontSize: 24, color: '#fff', marginBottom: 24 }}>
+              채팅방 설정
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <button
                 onClick={() => {
@@ -520,7 +528,9 @@ export default function ChatPageOptimized() {
                   border: 'none',
                   padding: '12px',
                   borderRadius: 8,
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  fontWeight: 600
                 }}
               >
                 💕 호감도 보기
@@ -536,7 +546,9 @@ export default function ChatPageOptimized() {
                   border: 'none',
                   padding: '12px',
                   borderRadius: 8,
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  fontWeight: 600
                 }}
               >
                 🔄 새로고침
@@ -552,26 +564,44 @@ export default function ChatPageOptimized() {
                   border: 'none',
                   padding: '12px',
                   borderRadius: 8,
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  fontWeight: 600
                 }}
               >
                 🚪 채팅방 나가기
               </button>
+              <button
+                onClick={() => setShowMoreModal(false)}
+                style={{
+                  background: 'transparent',
+                  color: '#999',
+                  border: '1px solid #444',
+                  padding: '12px',
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  marginTop: 8
+                }}
+              >
+                취소
+              </button>
             </div>
-          }
-        />
+          </div>
+        </div>
       )}
 
       {/* 나가기 확인 모달 */}
       {showLeaveConfirm && (
         <CustomAlert
           open={showLeaveConfirm}
-          onClose={() => setShowLeaveConfirm(false)}
           title="채팅방 나가기"
           message={`정말로 ${character.name}과의 채팅방을 나가시겠습니까?\n모든 대화 내역이 삭제됩니다.`}
           confirmText="나가기"
           cancelText="취소"
           onConfirm={handleLeaveChat}
+          onCancel={() => setShowLeaveConfirm(false)}
         />
       )}
 
