@@ -3,12 +3,12 @@
 // 환경별 API URL 설정 (동적)
 const getApiBaseUrl = () => {
   // 환경 변수에서 API URL 확인
-  if (process.env.REACT_APP_API_BASE_URL) {
+  if (process.env.REACT_APP_API_BASE_URL && process.env.REACT_APP_API_BASE_URL !== 'https://lovlechat-gkisl9vzq-malshues-projects.vercel.app') {
     return process.env.REACT_APP_API_BASE_URL;
   }
   
   // 프로덕션 환경 - Vercel 프록시 사용
-  if (process.env.NODE_ENV === 'production') {
+  if (process.env.NODE_ENV === 'production' || window.location.hostname.includes('vercel.app')) {
     // Vercel 프록시를 통한 상대 경로 사용
     return '';
   }
