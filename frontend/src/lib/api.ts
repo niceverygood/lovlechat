@@ -2,23 +2,41 @@ import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 
 // 환경별 API URL 설정 (동적)
 const getApiBaseUrl = (): string => {
+  // 디버깅용 로그
+  console.log('🔍 API URL 환경변수 확인:', {
+    NODE_ENV: process.env.NODE_ENV,
+    REACT_APP_API_URL: process.env.REACT_APP_API_URL,
+    REACT_APP_API_BASE_URL: process.env.REACT_APP_API_BASE_URL,
+    hostname: window.location.hostname,
+    isVercel: window.location.hostname.includes('vercel.app')
+  });
+
+  // Vercel 환경 강제 감지 (우선순위 최상위)
+  if (window.location.hostname.includes('vercel.app')) {
+    console.log('🚀 Vercel 환경 감지 - 강제로 상대 경로 사용');
+    return '';
+  }
+
   // 새로운 환경변수 확인
-  if (process.env.REACT_APP_API_URL) {
+  if (process.env.REACT_APP_API_URL && process.env.REACT_APP_API_URL !== '') {
+    console.log('✅ REACT_APP_API_URL 사용:', process.env.REACT_APP_API_URL);
     return process.env.REACT_APP_API_URL;
   }
   
   // 기존 환경변수 확인 (하위 호환성)
   if (process.env.REACT_APP_API_BASE_URL && process.env.REACT_APP_API_BASE_URL !== 'https://lovlechat-gkisl9vzq-malshues-projects.vercel.app') {
+    console.log('✅ REACT_APP_API_BASE_URL 사용:', process.env.REACT_APP_API_BASE_URL);
     return process.env.REACT_APP_API_BASE_URL;
   }
   
   // 프로덕션 환경 - Vercel 프록시 사용 (상대 경로)
-  if (process.env.NODE_ENV === 'production' || window.location.hostname.includes('vercel.app')) {
-    // Vercel에서는 /api/* 경로가 EC2로 프록시됨
+  if (process.env.NODE_ENV === 'production') {
+    console.log('✅ 프로덕션 환경 - 상대 경로 사용');
     return '';
   }
   
   // 개발 환경 - Express 백엔드 포트 3002로 연결
+  console.log('✅ 개발 환경 로컬 서버 사용: http://localhost:3002');
   return 'http://localhost:3002';
 };
 
