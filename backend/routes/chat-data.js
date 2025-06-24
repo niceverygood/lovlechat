@@ -32,8 +32,6 @@ router.get('/init', async (req, res) => {
     const limitNum = Math.min(parseInt(limit), 50);
     const offset = (pageNum - 1) * limitNum;
 
-    console.time('unifiedQuery');
-    
     // 통합 쿼리: 캐릭터, 페르소나, 하트, 메시지를 한 번에 조회
     const unifiedQuery = `
       SELECT 
@@ -92,10 +90,7 @@ router.get('/init', async (req, res) => {
       });
     }
 
-    console.timeEnd('unifiedQuery');
-
     // 메시지 조회 (페이징 적용)
-    console.time('getMessages');
     const messagesQuery = `
       SELECT id, sender, message, createdAt 
       FROM chats 
@@ -105,7 +100,6 @@ router.get('/init', async (req, res) => {
     `;
     
     const messages = await executeQuery(messagesQuery, [personaId, characterId, limitNum, offset]);
-    console.timeEnd('getMessages');
 
     // 응답 데이터 구성
     const character = {

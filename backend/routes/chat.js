@@ -217,12 +217,13 @@ router.get('/', async (req, res) => {
     // 메시지 조회
     console.time('getMessages');
     
-    // 성능 분석을 위한 EXPLAIN 쿼리 - 페이징 적용
-    const explainMessages = await executeQuery(
-      "EXPLAIN SELECT id, sender, message, createdAt FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT ? OFFSET ?",
-      [personaId, characterId, limitNum, offset]
-    );
-    console.log('🔍 Get Messages Query EXPLAIN:', JSON.stringify(explainMessages, null, 2));
+    // 개발 환경에서만 성능 분석
+    if (process.env.NODE_ENV === 'development') {
+      const explainMessages = await executeQuery(
+        "EXPLAIN SELECT id, sender, message, createdAt FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT ? OFFSET ?",
+        [personaId, characterId, limitNum, offset]
+      );
+    }
     
     const messages = await executeQuery(
       "SELECT id, sender, message, createdAt FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT ? OFFSET ?",

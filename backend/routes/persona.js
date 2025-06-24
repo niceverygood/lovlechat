@@ -3,9 +3,8 @@ const router = express.Router();
 const { executeQuery, executeMutation } = require('../services/db');
 const { v4: uuidv4 } = require('uuid');
 
-// GET /api/persona - 페르소나 목록 조회
+// GET /api/persona - 페르소나 목록 조회 (최적화됨)
 router.get('/', async (req, res) => {
-  console.time('getPersonas');
   const { userId } = req.query;
   
   if (!userId) {
@@ -16,22 +15,29 @@ router.get('/', async (req, res) => {
   }
 
   try {
-    console.time('getPersonasQuery');
     const personas = await executeQuery(
-      'SELECT * FROM personas WHERE userId = ? ORDER BY createdAt DESC',
+      'SELECT id, name, avatar, gender, age, job, info, habit, createdAt FROM personas WHERE userId = ? ORDER BY createdAt DESC',
       [userId]
     );
-    console.timeEnd('getPersonasQuery');
 
-    res.json({ ok: true, personas });
-    console.timeEnd('getPersonas');
+    res.json({ 
+      ok: true, 
+      personas: personas.map(p => ({
+        id: p.id,
+        name: p.name,
+        avatar: p.avatar,
+        gender: p.gender,
+        age: p.age,
+        job: p.job,
+        info: p.info,
+        habit: p.habit,
+        createdAt: p.createdAt
+      }))
+    });
   } catch (error) {
-    console.error('Persona 조회 에러:', error);
-    console.timeEnd('getPersonas');
     res.status(500).json({ 
       ok: false, 
-      error: '페르소나 데이터를 불러올 수 없습니다.',
-      details: error.message 
+      error: '페르소나 데이터를 불러올 수 없습니다.'
     });
   }
 });
@@ -67,21 +73,17 @@ router.post('/', async (req, res) => {
     );
 
     if (result.affectedRows > 0) {
-      const newPersona = { id: personaId, userId, name, age, gender, job, info, habit, avatar };
       res.json({ 
         ok: true, 
-        persona: newPersona, 
-        message: '페르소나가 성공적으로 생성되었습니다!' 
+        persona: { id: personaId, userId, name, age, gender, job, info, habit, avatar }
       });
     } else {
       res.status(500).json({ ok: false, error: '페르소나 생성 실패' });
     }
   } catch (error) {
-    console.error('Persona 생성 에러:', error);
     res.status(500).json({ 
       ok: false, 
-      error: '페르소나 생성 중 오류가 발생했습니다.',
-      details: error.message 
+      error: '페르소나 생성 중 오류가 발생했습니다.'
     });
   }
 });
