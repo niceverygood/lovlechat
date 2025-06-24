@@ -76,6 +76,9 @@ export default function ChatPage() {
   const [character, setCharacter] = useState<Character | null>(null);
   const [characterLoading, setCharacterLoading] = useState(true);
   const [days, setDays] = useState(1);
+  
+  // 통합 API로 초기 데이터 최적화
+  const [hasLoadedFromIntegratedAPI, setHasLoadedFromIntegratedAPI] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<{
     id: string;
@@ -151,7 +154,7 @@ export default function ChatPage() {
       }
       
       setIsPersonaLoading(true);
-      console.log('Fetching persona:', personaId);
+      // console.log('Fetching persona:', personaId);
       fetch(`/api/persona/${personaId}`)
         .then(res => {
           if (!res.ok) {
@@ -160,7 +163,7 @@ export default function ChatPage() {
           return res.json();
         })
         .then(data => {
-          console.log('Persona data:', data);
+          // console.log('Persona data:', data);
           if (data.ok) {
             const avatar = data.persona.avatar || DEFAULT_PROFILE_IMAGE;
             const personaData = {
@@ -172,7 +175,7 @@ export default function ChatPage() {
               info: data.persona.info,
               habit: data.persona.habit
             };
-            console.log('Setting persona:', personaData);
+            // console.log('Setting persona:', personaData);
             
             // 이미지 프리로딩
             const img = new Image();
@@ -211,6 +214,8 @@ export default function ChatPage() {
         }
       });
   }, [id, personaId]);
+
+  // 게스트 모드 페르소나 처리는 통합 API에서 처리됨
 
   useEffect(() => { favorRef.current = favor; }, [favor]);
 
@@ -282,7 +287,7 @@ export default function ChatPage() {
         if (messagesContainerRef.current) {
           messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
           hasInitialScrolled.current = true;
-          console.log('🏠 채팅방 진입: 최근 메시지로 즉시 이동 완료');
+          // console.log('🏠 채팅방 진입: 최근 메시지로 즉시 이동 완료');
         }
       }, 0);
     }
@@ -299,7 +304,7 @@ export default function ChatPage() {
             top: messagesContainerRef.current.scrollHeight,
             behavior: 'smooth'
           });
-          console.log('💬 새 메시지: 부드러운 스크롤 완료');
+          // console.log('💬 새 메시지: 부드러운 스크롤 완료');
         }
       }, 100);
     }
@@ -341,21 +346,30 @@ export default function ChatPage() {
     }
   }, [showProfileModal, character, selectedProfile]);
 
-  // 게스트 모드에서 메시지 전송 제한
+  // 게스트 모드에서 메시지 전송 제한 (메모이제이션 최적화)
   const handleSendMessage = useCallback(async (message: string) => {
     if (isGuestMode()) {
-      console.log('게스트 모드 메시지 전송:', { guestMessageCount, message });
+      // console.log('게스트 모드 메시지 전송:', { guestMessageCount, message });
       
       if (guestMessageCount >= 3) {
-        console.log('게스트 모드 메시지 제한 도달 - 로그인 모달 표시');
+        // console.log('게스트 모드 메시지 제한 도달 - 로그인 모달 표시');
         setShowLoginModal(true);
         return;
       }
     }
-    // 일반 메시지 전송 후 하트 잔액 갱신
-    await sendMessage(message);
-    await refreshHearts();
-  }, [guestMessageCount, sendMessage, refreshHearts]);
+    
+    try {
+      // 메시지 전송
+      await sendMessage(message);
+      
+      // 하트 잔액 갱신 (게스트가 아닌 경우에만)
+      if (!isGuestMode() && user?.uid) {
+        await refreshHearts();
+      }
+    } catch (error) {
+      console.error('메시지 전송 오류:', error);
+    }
+  }, [guestMessageCount, sendMessage, refreshHearts, user?.uid]);
 
   const handleLeaveChat = async () => {
     try {
@@ -394,30 +408,7 @@ export default function ChatPage() {
     return <ChatSkeleton />;
   }
 
-  // 디버깅: messages 상태 확인
-  console.log('🏠 ChatPage 렌더링 상세:', { 
-    timestamp: new Date().toISOString(),
-    messages: messages, 
-    messagesLength: messages?.length, 
-    loading: loading,
-    hasMessages: messages && messages.length > 0,
-    condition: !messages || messages.length === 0,
-    firstMessage: messages?.[0],
-    messageTypes: messages?.map(m => typeof m),
-    // 📍 useChat 파라미터 디버깅
-    id: id,
-    parsedId: id ? parseInt(id) : undefined,
-    personaId: personaId,
-    personaIdAfterOr: personaId || undefined,
-    urlSearch: location.search,
-    // 🔍 메시지 상세 정보
-    messageDetails: messages?.map((msg, idx) => ({
-      index: idx,
-      id: msg.id,
-      text: msg.text?.substring(0, 20) + '...',
-      sender: msg.sender
-    }))
-  });
+  // 디버깅 로그 제거하여 성능 최적화
 
   if (!messages || messages.length === 0) {
     // 채팅 내역이 없을 때: 상단 캐릭터 정보/첫 장면/첫 대사만 보여주고, 메시지 영역은 비워둠

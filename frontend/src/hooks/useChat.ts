@@ -67,55 +67,25 @@ export const useChat = (characterId?: number | string, personaId?: string) => {
     };
   }, []);
 
-  // === 메시지 로드 (페이징 지원) ===
+  // === 메시지 로드 (페이징 지원) - 최적화 ===
   const loadMessages = useCallback(async (characterId: number | string, personaId: string, page = 1, append = false) => {
     if (!personaId || isUnmountedRef.current) return;
     
-    console.log('🔄 loadMessages 호출됨:', { characterId, personaId, page, append });
-    console.log('🧪 현재 상태:', { messages: state.messages.length, loading: state.loading });
+    // console.log('🔄 loadMessages 호출됨:', { characterId, personaId, page, append });
     
     setState(prev => ({ ...prev, loading: true, error: null }));
     
     try {
-      console.log('🌐 요청 URL: /api/chat');
+      // console.log('🌐 요청 URL: /api/chat');
       
       // 페이징 파라미터 추가 (첫 로드는 최신 20개, 이전 메시지는 20개씩 추가)
       const limit = 20;
       const data = await apiGet(`/api/chat?personaId=${personaId}&characterId=${characterId}&page=${page}&limit=${limit}`);
-      console.log('📦 응답 데이터 원본:', data);
-      console.log('📊 메시지 배열 상세 확인:', {
-        hasData: !!data,
-        hasOkField: 'ok' in data,
-        okValue: data?.ok,
-        hasMessages: !!data?.messages,
-        messagesType: typeof data?.messages,
-        isArray: Array.isArray(data?.messages),
-        messageCount: data?.messages?.length,
-        firstThreeMessages: data?.messages?.slice(0, 3)
-      });
       
       if (!isUnmountedRef.current) {
-        console.log('🔍 조건 검사 상세:', {
-          hasData: !!data,
-          dataOk: data?.ok,
-          hasMessages: !!data?.messages,
-          isArray: Array.isArray(data?.messages),
-          finalCondition: data && data.messages && Array.isArray(data.messages),
-          isUnmounted: isUnmountedRef.current
-        });
-        
         if (data && data.messages && Array.isArray(data.messages)) {
           try {
-            console.log('✅ 메시지 처리 시작 - 개수:', data.messages.length);
-            console.log('🔍 첫 번째 메시지 상세:', data.messages[0]);
-            
             const formattedMessages = data.messages.map((msg: any, index: number) => {
-              console.log(`📝 메시지 ${index + 1} 처리중:`, {
-                id: msg.id,
-                message: msg.message,
-                sender: msg.sender,
-                createdAt: msg.createdAt
-              });
               return {
                 id: msg.id?.toString() || Date.now().toString() + index,
                 text: msg.message || msg.text || '',
@@ -130,19 +100,14 @@ export const useChat = (characterId?: number | string, personaId?: string) => {
               };
             });
             
-            console.log('🎯 최종 처리된 메시지들:', formattedMessages);
-            console.log('🎯 처리된 메시지 개수:', formattedMessages.length);
-            
             setState(prev => {
-              console.log('🔄 setState 호출 - 이전 상태:', prev.messages.length);
-              
               // append 모드: 기존 메시지 앞에 새 메시지들 추가 (무한 스크롤)
               // 기본 모드: 전체 메시지 교체
               const finalMessages = append 
                 ? [...formattedMessages, ...prev.messages]
                 : formattedMessages;
               
-              const newState = {
+              return {
                 ...prev,
                 messages: finalMessages,
                 favor: data.favor || prev.favor,
@@ -150,11 +115,7 @@ export const useChat = (characterId?: number | string, personaId?: string) => {
                 loading: false,
                 pagination: data.pagination
               };
-              console.log('🔄 setState 호출 - 새로운 상태:', newState.messages.length);
-              return newState;
             });
-            
-            console.log('✅ setState 완료');
             
           } catch (mapError) {
             console.error('💥 메시지 매핑 에러:', mapError);
@@ -212,7 +173,7 @@ export const useChat = (characterId?: number | string, personaId?: string) => {
       avatar: undefined
     };
     
-    console.log('👤 사용자 메시지 즉시 추가:', userMessage);
+    // console.log('👤 사용자 메시지 즉시 추가:', userMessage);
     setState(prev => ({
       ...prev,
       messages: [...prev.messages, userMessage],
@@ -232,14 +193,6 @@ export const useChat = (characterId?: number | string, personaId?: string) => {
     }, 100);
     
     try {
-      console.log('📤 메시지 전송 요청:', { 
-        personaId: persId, 
-        characterId: parseInt(charId),
-        message: message,
-        sender: 'user',
-        userId: userIdToSend
-      });
-      
       const data = await apiPost('/api/chat', { 
         personaId: persId, 
         characterId: parseInt(charId),
@@ -247,13 +200,11 @@ export const useChat = (characterId?: number | string, personaId?: string) => {
         sender: 'user',
         userId: userIdToSend
       });
-      console.log('📨 메시지 전송 응답:', data);
       
       if (isUnmountedRef.current) return;
       
-      if (data && Array.isArray(data.messages)) {
+              if (data && Array.isArray(data.messages)) {
         // 2️⃣ 백엔드에서 받은 전체 메시지 목록으로 업데이트
-        console.log('🔄 전체 메시지 목록으로 업데이트');
         const formattedMessages = data.messages.map((msg: any) => ({
           id: msg.id?.toString() || Date.now().toString(),
           text: msg.message || msg.text || '',
@@ -298,9 +249,8 @@ export const useChat = (characterId?: number | string, personaId?: string) => {
             });
           }
         }, 100);
-      } else {
+              } else {
         // 3️⃣ 메시지 리스트를 다시 로드
-        console.log('🔄 메시지 리스트 다시 로드');
         await loadMessages(charId, persId);
         setState(prev => ({ ...prev, loading: false }));
         
@@ -327,27 +277,33 @@ export const useChat = (characterId?: number | string, personaId?: string) => {
     } finally {
       // 모든 경우에 로딩 상태 종료
       if (!isUnmountedRef.current) {
-        console.log('🏁 sendMessage 완료 - loading false 설정');
         setState(prev => ({ ...prev, loading: false }));
       }
     }
   }, [characterId, personaId, loadMessages, user?.uid]);
 
-  // === 초기 데이터 로드 ===
+  // === 초기 데이터 로드 (최적화) ===
+  const prevParamsRef = useRef<{characterId?: number | string, personaId?: string}>({});
+  
   useEffect(() => {
-    console.log('🚀 useChat useEffect 실행:', { characterId, personaId });
+    // console.log('🚀 useChat useEffect 실행:', { characterId, personaId });
+    
+    // 이전 파라미터와 동일한지 체크 (불필요한 재로드 방지)
+    const hasParamsChanged = 
+      prevParamsRef.current.characterId !== characterId || 
+      prevParamsRef.current.personaId !== personaId;
+    
+    if (!hasParamsChanged) {
+      // console.log('⏭️  파라미터 변경 없음 - 로드 건너뜀');
+      return;
+    }
     
     if (characterId && personaId && typeof personaId === 'string') {
-      console.log('✅ 조건 만족 - loadMessages 호출');
+      // console.log('✅ 조건 만족 - loadMessages 호출');
+      prevParamsRef.current = { characterId, personaId };
       loadMessages(characterId, personaId);
-    } else {
-      console.log('❌ 조건 불만족 - loadMessages 건너뜀', {
-        hasCharacterId: !!characterId,
-        hasPersonaId: !!personaId,
-        personaIdType: typeof personaId
-      });
     }
-  }, [characterId, personaId]);
+  }, [characterId, personaId, loadMessages]);
 
   // === 반환값 ===
   return {

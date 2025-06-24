@@ -49,10 +49,10 @@ router.get('/:characterId', async (req, res) => {
       
       // 3. 최근 메시지 (20개)
       executeQuery(`
-        SELECT c.*, ch.name as characterName, ch.profileImg as characterProfileImg, 
-               ch.age as characterAge, ch.job as characterJob, p.avatar
+        SELECT c.*, cp.name as characterName, cp.profileImg as characterProfileImg, 
+               cp.age as characterAge, cp.job as characterJob, p.avatar
         FROM chats c
-        LEFT JOIN character_profiles ch ON c.characterId = ch.id
+        LEFT JOIN character_profiles cp ON c.characterId = cp.id
         LEFT JOIN personas p ON c.personaId = p.id
         WHERE c.characterId = ? AND c.personaId = ?
         ORDER BY c.createdAt DESC
