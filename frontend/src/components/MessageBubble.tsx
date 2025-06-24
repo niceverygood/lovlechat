@@ -1,5 +1,6 @@
 import React from "react";
 import { DEFAULT_PROFILE_IMAGE, handleProfileImageError } from '../utils/constants';
+import OptimizedImage from './OptimizedImage';
 
 export interface Msg {
   sender: "user" | "ai" | "character";
@@ -58,7 +59,7 @@ function parseMessageText(text: string) {
   });
 }
 
-export default function MessageBubble({ message, onProfileClick }: Props) {
+const MessageBubble = React.memo<Props>(({ message, onProfileClick }) => {
   const isUser = message.sender === "user";
   const isCharacter = message.sender === "character" || message.sender === "ai";
   
@@ -70,21 +71,19 @@ export default function MessageBubble({ message, onProfileClick }: Props) {
       marginBottom: 10
     }}>
       {isUser && message.avatar && (
-        <img
+        <OptimizedImage
           src={message.avatar || DEFAULT_PROFILE_IMAGE}
           alt="me"
           style={{ width: 40, height: 40, borderRadius: '50%', marginLeft: 10, background: '#222', objectFit: 'cover', cursor: onProfileClick ? 'pointer' : 'default', border: '2px solid #fff' }}
           onClick={onProfileClick}
-          onError={handleProfileImageError}
         />
       )}
       {isCharacter && message.avatar && (
-        <img
+        <OptimizedImage
           src={message.avatar || DEFAULT_PROFILE_IMAGE}
           alt="character"
           style={{ width: 40, height: 40, borderRadius: '50%', marginRight: 10, background: '#222', objectFit: 'cover', cursor: onProfileClick ? 'pointer' : 'default', border: '2px solid #fff' }}
           onClick={onProfileClick}
-          onError={handleProfileImageError}
         />
       )}
       <div
@@ -107,4 +106,16 @@ export default function MessageBubble({ message, onProfileClick }: Props) {
       </div>
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  // 메시지 내용과 프로필 클릭 핸들러가 같으면 리렌더링 방지
+  return (
+    prevProps.message.text === nextProps.message.text &&
+    prevProps.message.sender === nextProps.message.sender &&
+    prevProps.message.avatar === nextProps.message.avatar &&
+    prevProps.onProfileClick === nextProps.onProfileClick
+  );
+});
+
+MessageBubble.displayName = 'MessageBubble';
+
+export default MessageBubble;
