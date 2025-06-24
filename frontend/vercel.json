@@ -35,7 +35,7 @@
     "env": {
       "NODE_ENV": "production",
       "GENERATE_SOURCEMAP": "false",
-      "REACT_APP_API_URL": "http://54.79.211.48:3002"
+      "REACT_APP_API_URL": ""
     }
   }
   
