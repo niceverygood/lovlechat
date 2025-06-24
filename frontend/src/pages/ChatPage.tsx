@@ -941,15 +941,13 @@ export default function ChatPage() {
       )}
 
       {/* 프로필 상세 모달 */}
-      <ProfileDetailModal
-        isOpen={showProfileModal}
-        onClose={() => setShowProfileModal(false)}
-        profile={selectedProfile || {
-          id: "",
-          name: "",
-          avatar: ""
-        }}
-      />
+      {showProfileModal && selectedProfile && (
+        <ProfileDetailModal
+          isOpen={showProfileModal}
+          onClose={() => setShowProfileModal(false)}
+          profile={selectedProfile}
+        />
+      )}
 
       {/* 호감도 상세 모달 */}
       <FavorDetailModal
