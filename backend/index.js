@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -59,6 +60,15 @@ app.get('/', (req, res) => {
     status: 'OK',
     timestamp: new Date().toISOString()
   });
+});
+
+// 정적 파일 서빙 (React build)
+app.use(express.static(path.join(__dirname, '../frontend/build')));
+
+// SPA 라우팅 지원: /api로 시작하지 않는 모든 요청은 React index.html 반환
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(__dirname, '../frontend/build/index.html'));
 });
 
 // 404 handler
