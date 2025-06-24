@@ -31,9 +31,33 @@ interface MyInfoStats {
   lastActivity?: string;
 }
 
+interface Character {
+  id: number;
+  profileImg?: string | null;
+  name?: string;
+  tags?: string[] | string;
+  selectedTags?: string[];
+  category?: string;
+  gender?: string;
+  scope?: string;
+  age?: string | number;
+  job?: string;
+  oneLiner?: string;
+  background?: string;
+  personality?: string;
+  habit?: string;
+  like?: string;
+  dislike?: string;
+  extraInfos?: string[];
+  firstScene?: string;
+  firstMessage?: string;
+  backgroundImg?: string | null;
+}
+
 interface MyInfoData {
   user: User;
   personas: Persona[];
+  characters: Character[];
   hearts: number;
   responseTime: number;
 }
@@ -75,6 +99,7 @@ export const useMyInfo = (userId: string | null): UseMyInfoReturn => {
       setData({
         user: { userId: 'guest', name: '게스트', createdAt: new Date().toISOString() },
         personas: [],
+        characters: [],
         hearts: 0,
         responseTime: 0
       });

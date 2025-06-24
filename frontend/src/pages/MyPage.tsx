@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback, useMemo, memo } from "react";
 import BottomNav from "../components/BottomNav";
 import { useNavigate } from "react-router-dom";
 import { FiSettings } from "react-icons/fi";
@@ -11,6 +11,7 @@ import { useHearts } from "../hooks/useHearts";
 import { useMyInfo, clearMyInfoCache } from "../hooks/useMyInfo";
 import { apiGet, apiPost, apiPut, apiDelete } from '../lib/api';
 import CustomAlert from '../components/CustomAlert';
+import OptimizedImage from '../components/OptimizedImage';
 import { DEFAULT_PROFILE_IMAGE, handleProfileImageError } from '../utils/constants';
 
 interface Character {
@@ -51,22 +52,19 @@ interface Persona {
 // 프로필 이미지 경로 상수로 지정 (이제 constants에서 import)
 
 
-// HeartButton 컴포넌트 분리
-function HeartButton({ count }: { count: number }) {
-  const navigate = useNavigate();
-  return (
-    <button
-      onClick={() => navigate('/heart-shop')}
-      style={{
-        display: 'flex', alignItems: 'center', fontWeight: 700, fontSize: 18, color: "#ff4081",
-        background: 'none', border: 'none', cursor: 'pointer', padding: 0, margin: 0
-      }}
-    >
-      <span style={{ marginRight: 4 }}>보유 하트</span>
-      {count} <span role="img" aria-label="하트" style={{ marginLeft: 4, fontSize: 20 }}>❤️</span>
-    </button>
-  );
-}
+// 메모이제이션된 HeartButton 컴포넌트
+const HeartButton = memo(({ count, onClick }: { count: number; onClick: () => void }) => (
+  <button
+    onClick={onClick}
+    style={{
+      display: 'flex', alignItems: 'center', fontWeight: 700, fontSize: 18, color: "#ff4081",
+      background: 'none', border: 'none', cursor: 'pointer', padding: 0, margin: 0
+    }}
+  >
+    <span style={{ marginRight: 4 }}>보유 하트</span>
+    {count} <span role="img" aria-label="하트" style={{ marginLeft: 4, fontSize: 20 }}>❤️</span>
+  </button>
+));
 
 export default function MyPage() {
   const navigate = useNavigate();
@@ -93,8 +91,39 @@ export default function MyPage() {
   const [alertTitle, setAlertTitle] = useState('');
   const [loading, setLoading] = useState(true);
 
-  // MyInfo에서 페르소나 데이터 가져오기
+  // MyInfo에서 데이터 가져오기 (통합 API)
   const personas = myInfoData?.personas || [];
+  const myInfoCharacters = myInfoData?.characters || [];
+
+  // 메모이제이션된 콜백들
+  const handleHeartClick = useCallback(() => {
+    navigate('/heart-shop');
+  }, [navigate]);
+
+  const handleProfileEdit = useCallback((profile: Persona) => {
+    setSelectedProfile(profile);
+    setShowProfileEditModal(true);
+  }, []);
+
+  const handleProfileDelete = useCallback(async (profileId: string) => {
+    try {
+      await apiDelete(`/api/persona/${profileId}`);
+      await refetchMyInfo();
+      clearMyInfoCache(userId);
+    } catch (error) {
+      console.error('프로필 삭제 오류:', error);
+    }
+  }, [refetchMyInfo, userId]);
+
+  const handleCharacterDelete = useCallback(async (characterId: number) => {
+    try {
+      await apiDelete(`/api/character/${characterId}?userId=${userId}`);
+      await refetchMyInfo();
+      clearMyInfoCache(userId);
+    } catch (error) {
+      console.error('캐릭터 삭제 오류:', error);
+    }
+  }, [userId, refetchMyInfo]);
 
   useEffect(() => {
     // Wait for auth to finish loading
@@ -107,36 +136,16 @@ export default function MyPage() {
       setLoading(false);
       return;
     }
-    console.log('MyPage 캐릭터 데이터 로딩 시작, userId:', userId);
-    setLoading(true);
-    // 캐릭터 데이터만 별도로 로딩 (페르소나는 useMyInfo에서 관리)
-    apiGet(`/api/character?userId=${userId}`)
-      .then((characterData) => {
-        console.log('API 응답 - characterData:', characterData);
-        
-        if (characterData.ok) {
-          console.log('캐릭터 설정:', characterData.characters);
-          const charactersWithTags = characterData.characters.map((char: any) => ({
-            ...char,
-            selectedTags: Array.isArray(char.tags)
-              ? char.tags
-              : (typeof char.tags === 'string' && char.tags.startsWith('['))
-                ? JSON.parse(char.tags)
-                : (typeof char.tags === 'string' && char.tags.length > 0)
-                  ? char.tags.split(',').map((t: string) => t.trim())
-                  : [],
-          }));
-          setCharacters(charactersWithTags);
-        }
-        setLoading(false);
-      })
-      .catch(error => {
-        console.error('캐릭터 데이터 로딩 오류:', error);
-        setLoading(false);
-        setAlertTitle('오류');
-        setAlertMsg('캐릭터 데이터를 불러오는 중 오류가 발생했습니다.');
-        setAlertOpen(true);
-      });
+    console.log('MyPage useMyInfo로 통합 데이터 사용, userId:', userId);
+    setLoading(false);
+    
+    // 캐릭터 데이터는 MyInfo에서 이미 로딩됨
+    if (myInfoCharacters.length > 0) {
+      console.log('MyInfo 캐릭터 데이터 설정:', myInfoCharacters.length, '개');
+      setCharacters(myInfoCharacters);
+    } else {
+      setCharacters([]);
+    }
 
     // 사용자 프로필 정보 불러오기 (localStorage에서)
     const savedUserProfile = localStorage.getItem('userProfile');
@@ -148,7 +157,7 @@ export default function MyPage() {
     // 팔로워/팔로잉 수 불러오기 (추후 실제 API 연동)
     setFollowerCount(2);
     setFollowingCount(0);
-  }, [userId, authLoading]);
+  }, [userId, authLoading, myInfoCharacters]);
 
   const handleUserProfileImageClick = () => {
     fileInputRef.current?.click();
@@ -182,10 +191,7 @@ export default function MyPage() {
     setShowUserProfileEditModal(false);
   };
 
-  const handleProfileEdit = (profile: Persona) => {
-    setSelectedProfile(profile);
-    setShowProfileEditModal(true);
-  };
+
 
   // 멀티프로필 목록 최신화 함수 (useMyInfo 사용)
   const fetchPersonas = async () => {
@@ -310,16 +316,18 @@ export default function MyPage() {
             justifyContent: "space-between"
           }}>
             <div style={{ display: "flex", alignItems: "center" }}>
-              <img
+              <OptimizedImage
                 src={userProfile.avatar || DEFAULT_PROFILE_IMAGE}
                 alt="프로필"
-                style={{ width: 60, height: 60, borderRadius: "50%", marginRight: 16, objectFit: "cover", background: "#222", border: "2px solid #333", cursor: "pointer" }}
+                width={60}
+                height={60}
+                style={{ borderRadius: "50%", marginRight: 16, objectFit: "cover", background: "#222", border: "2px solid #333", cursor: "pointer" }}
                 onClick={() => setShowProfileDetailModal(true)}
-                onError={handleProfileImageError}
+                priority={true}
               />
               <div>
                 <div style={{ fontWeight: 700, fontSize: 20 }}>{userProfile.name}</div>
-                <HeartButton count={heartsLoading ? 0 : hearts} />
+                <HeartButton count={heartsLoading ? 0 : hearts} onClick={handleHeartClick} />
               </div>
             </div>
             <div style={{ textAlign: "right", display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
@@ -364,12 +372,14 @@ export default function MyPage() {
             {/* 멀티프로필 리스트 */}
             {personas.map((p) => (
               <div key={p.id} style={{ display: "flex", alignItems: "center", background: "var(--color-card-alt)", borderRadius: 12, padding: 12, marginBottom: 10 }}>
-                    <img
+                    <OptimizedImage
                       src={p.avatar || DEFAULT_PROFILE_IMAGE}
                       alt={p.name}
-                  style={{ width: 40, height: 40, borderRadius: "50%", marginRight: 12, objectFit: "cover", background: "#222", border: "1.5px solid #333", cursor: 'pointer' }}
-                  onClick={() => { setSelectedProfile(p); setShowProfileDetailModal(true); }}
-                    onError={handleProfileImageError}
+                      width={40}
+                      height={40}
+                      style={{ borderRadius: "50%", marginRight: 12, objectFit: "cover", background: "#222", border: "1.5px solid #333", cursor: 'pointer' }}
+                      onClick={() => { setSelectedProfile(p); setShowProfileDetailModal(true); }}
+                      priority={false}
                   />
                 <span style={{ fontWeight: 600, fontSize: 16 }}>{p.name}</span>
               <button
@@ -380,8 +390,7 @@ export default function MyPage() {
                 style={{ color: "#ff4081", background: "none", border: "none", fontSize: 16, cursor: "pointer", marginLeft: 8 }}
                 onClick={async () => {
                   if (window.confirm("정말로 삭제하시겠습니까?")) {
-                    await apiDelete(`/api/persona/${p.id}`);
-                    await refetchMyInfo(); // 삭제 후 MyInfo 새로고침
+                    await handleProfileDelete(p.id);
                   }
                 }}
               >삭제</button>
@@ -395,12 +404,14 @@ export default function MyPage() {
             ) : (
               characters.map(char => (
                 <div key={char.id} style={{ display: "flex", alignItems: "center", background: "var(--color-card)", borderRadius: 12, padding: 12, marginBottom: 12 }}>
-                  <img
+                  <OptimizedImage
                     src={char.profileImg || DEFAULT_PROFILE_IMAGE}
-                    alt={char.name}
-                    style={{ width: 48, height: 48, borderRadius: "50%", marginRight: 12, objectFit: "cover", cursor: "pointer" }}
+                    alt={char.name || '캐릭터'}
+                    width={48}
+                    height={48}
+                    style={{ borderRadius: "50%", marginRight: 12, objectFit: "cover", cursor: "pointer" }}
                     onClick={() => navigate(`/character/${char.id}`)}
-                    onError={handleProfileImageError}
+                    priority={false}
                   />
                   <span style={{ fontWeight: 600, fontSize: 16 }}>{char.name}</span>
                   <button 
@@ -411,10 +422,7 @@ export default function MyPage() {
                     style={{ color: "#ff4081", background: "none", border: "none", fontSize: 16, cursor: "pointer" }}
                     onClick={async () => {
                       if (window.confirm("정말로 삭제하시겠습니까?")) {
-                        await apiDelete(`/api/character/${char.id}?userId=${userId}`);
-                        // 삭제(숨김) 후 목록을 서버에서 다시 fetch
-                        const data = await apiGet(`/api/character?userId=${userId}`);
-                        if (data.ok) setCharacters(data.characters);
+                        await handleCharacterDelete(char.id);
                       }
                     }}
                   >삭제</button>
@@ -442,11 +450,13 @@ export default function MyPage() {
             {/* 프로필 이미지 */}
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
               <div style={{ position: 'relative' }}>
-                <img
+                <OptimizedImage
                   src={userProfile.avatar || DEFAULT_PROFILE_IMAGE}
                   alt="프로필"
-                  style={{ width: 100, height: 100, borderRadius: '50%', objectFit: 'cover', border: '3px solid #fff' }}
-                  onError={handleProfileImageError}
+                  width={100}
+                  height={100}
+                  style={{ borderRadius: '50%', objectFit: 'cover', border: '3px solid #fff' }}
+                  priority={true}
                 />
                 <button
                   onClick={handleUserProfileImageClick}

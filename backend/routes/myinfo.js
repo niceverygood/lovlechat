@@ -13,6 +13,7 @@ router.get('/', async (req, res) => {
       ok: true,
       user: { name: "게스트", avatar: "/default_profile.png" },
       personas: [],
+      characters: [],
       hearts: 0,
       responseTime: Date.now() - startTime
     });
@@ -33,7 +34,7 @@ router.get('/', async (req, res) => {
     console.log('⭕ MyInfo 캐시 미스, DB 조회:', userId);
 
     // 병렬로 모든 데이터 조회
-    const [userResult, personasResult, heartsResult] = await Promise.all([
+    const [userResult, personasResult, heartsResult, charactersResult] = await Promise.all([
       // 사용자 기본 정보 (Firebase 정보 기반)
       executeQuery(`
         SELECT userId, displayName, createdAt
@@ -57,6 +58,14 @@ router.get('/', async (req, res) => {
         WHERE userId = ? 
         ORDER BY createdAt DESC 
         LIMIT 1
+      `, [userId]),
+
+      // 사용자가 생성한 캐릭터들
+      executeQuery(`
+        SELECT id, profileImg, name, tags, category, gender, scope, age, job, oneLiner, background, personality, habit, \`like\`, dislike, extraInfos, firstScene, firstMessage, backgroundImg, createdAt
+        FROM characters 
+        WHERE userId = ? AND isDeleted = FALSE
+        ORDER BY createdAt DESC
       `, [userId])
     ]);
 
@@ -83,6 +92,43 @@ router.get('/', async (req, res) => {
       habit: p.habit
     }));
 
+    // 캐릭터 정보 정리 (태그 파싱)
+    const characters = charactersResult.map(char => ({
+      id: char.id,
+      profileImg: char.profileImg,
+      name: char.name,
+      tags: char.tags,
+      selectedTags: (() => {
+        try {
+          if (Array.isArray(char.tags)) return char.tags;
+          if (typeof char.tags === 'string' && char.tags.startsWith('[')) {
+            return JSON.parse(char.tags);
+          }
+          if (typeof char.tags === 'string' && char.tags.length > 0) {
+            return char.tags.split(',').map(t => t.trim());
+          }
+          return [];
+        } catch (e) {
+          return [];
+        }
+      })(),
+      category: char.category,
+      gender: char.gender,
+      scope: char.scope,
+      age: char.age,
+      job: char.job,
+      oneLiner: char.oneLiner,
+      background: char.background,
+      personality: char.personality,
+      habit: char.habit,
+      like: char.like,
+      dislike: char.dislike,
+      extraInfos: char.extraInfos,
+      firstScene: char.firstScene,
+      firstMessage: char.firstMessage,
+      backgroundImg: char.backgroundImg
+    }));
+
     // 하트 잔액
     const hearts = heartsResult.length > 0 ? heartsResult[0].afterHearts : 100;
 
@@ -90,6 +136,7 @@ router.get('/', async (req, res) => {
       ok: true,
       user,
       personas,
+      characters,
       hearts,
       responseTime: Date.now() - startTime
     };
