@@ -71,8 +71,8 @@ export default function HeartShopPage() {
       // 실제 결제 모드 설정
       digital: true,   // 디지털 상품 (하트)
       app_scheme: 'lovlechat',  // 앱 스킴
-      notice_url: `${window.location.origin.replace('3001', '3002')}/api/payment/webhook`, // 웹훅 URL
-      confirm_url: `${window.location.origin.replace('3001', '3002')}/api/payment/confirm`, // 결제 확인 URL
+      notice_url: `${API_BASE_URL}/api/payment/webhook`, // 웹훅 URL
+      confirm_url: `${API_BASE_URL}/api/payment/confirm`, // 결제 확인 URL
     };
 
     try {
