@@ -57,3 +57,4 @@ rds_complete_schema.sql
 .vercel/
 lovlechat_export_*.sql
 *.pem
+.env
