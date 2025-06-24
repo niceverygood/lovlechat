@@ -2,7 +2,12 @@
 
 // 환경별 API URL 설정 (동적)
 const getApiBaseUrl = () => {
-  // 환경 변수에서 API URL 확인
+  // 새로운 환경변수 확인
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  
+  // 기존 환경변수 확인 (하위 호환성)
   if (process.env.REACT_APP_API_BASE_URL && process.env.REACT_APP_API_BASE_URL !== 'https://lovlechat-gkisl9vzq-malshues-projects.vercel.app') {
     return process.env.REACT_APP_API_BASE_URL;
   }
