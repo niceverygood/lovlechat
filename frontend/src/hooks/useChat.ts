@@ -67,11 +67,11 @@ export const useChat = (characterId?: number | string, personaId?: string) => {
     };
   }, []);
 
-  // === 메시지 로드 ===
-  const loadMessages = useCallback(async (characterId: number | string, personaId: string) => {
+  // === 메시지 로드 (페이징 지원) ===
+  const loadMessages = useCallback(async (characterId: number | string, personaId: string, page = 1, append = false) => {
     if (!personaId || isUnmountedRef.current) return;
     
-    console.log('🔄 loadMessages 호출됨:', { characterId, personaId });
+    console.log('🔄 loadMessages 호출됨:', { characterId, personaId, page, append });
     console.log('🧪 현재 상태:', { messages: state.messages.length, loading: state.loading });
     
     setState(prev => ({ ...prev, loading: true, error: null }));
@@ -79,7 +79,9 @@ export const useChat = (characterId?: number | string, personaId?: string) => {
     try {
       console.log('🌐 요청 URL: /api/chat');
       
-      const data = await apiGet(`/api/chat?personaId=${personaId}&characterId=${characterId}`);
+      // 페이징 파라미터 추가 (첫 로드는 최신 20개, 이전 메시지는 20개씩 추가)
+      const limit = 20;
+      const data = await apiGet(`/api/chat?personaId=${personaId}&characterId=${characterId}&page=${page}&limit=${limit}`);
       console.log('📦 응답 데이터 원본:', data);
       console.log('📊 메시지 배열 상세 확인:', {
         hasData: !!data,
@@ -133,12 +135,20 @@ export const useChat = (characterId?: number | string, personaId?: string) => {
             
             setState(prev => {
               console.log('🔄 setState 호출 - 이전 상태:', prev.messages.length);
+              
+              // append 모드: 기존 메시지 앞에 새 메시지들 추가 (무한 스크롤)
+              // 기본 모드: 전체 메시지 교체
+              const finalMessages = append 
+                ? [...formattedMessages, ...prev.messages]
+                : formattedMessages;
+              
               const newState = {
                 ...prev,
-                messages: formattedMessages,
-                favor: data.favor || 0,
+                messages: finalMessages,
+                favor: data.favor || prev.favor,
                 favorChange: 0,
-                loading: false
+                loading: false,
+                pagination: data.pagination
               };
               console.log('🔄 setState 호출 - 새로운 상태:', newState.messages.length);
               return newState;

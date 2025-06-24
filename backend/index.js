@@ -41,6 +41,7 @@ app.use('/api/character', require('./routes/character-id'));
 app.use('/api/character/favor', require('./routes/character-favor'));
 app.use('/api/character/refresh', require('./routes/character-refresh'));
 app.use('/api/chat', require('./routes/chat'));
+app.use('/api/chat-data', require('./routes/chat-data'));
 app.use('/api/persona', require('./routes/persona'));
 app.use('/api/persona', require('./routes/persona-id'));
 app.use('/api/hearts', require('./routes/hearts'));
