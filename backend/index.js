@@ -45,6 +45,7 @@ app.use('/api/persona', require('./routes/persona'));
 app.use('/api/persona', require('./routes/persona-id'));
 app.use('/api/hearts', require('./routes/hearts'));
 app.use('/api/payment', require('./routes/payment'));
+app.use('/api/deploy', require('./routes/deploy'));
 app.use('/api/test-db', require('./routes/test-db'));
 
 // Health check
