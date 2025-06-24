@@ -7,10 +7,10 @@ const getApiBaseUrl = () => {
     return process.env.REACT_APP_API_BASE_URL;
   }
   
-  // 프로덕션 환경 - EC2 백엔드 사용
+  // 프로덕션 환경 - Vercel 프록시 사용
   if (process.env.NODE_ENV === 'production') {
-    // EC2 백엔드 서버 URL
-    return 'http://54.79.211.48:3002';
+    // Vercel 프록시를 통한 상대 경로 사용
+    return '';
   }
   
   // 개발 환경 - Express 백엔드 포트 3002로 연결

@@ -1,6 +1,7 @@
 {
     "regions": ["hnd1"],
     "rewrites": [
+      { "source": "/api/(.*)", "destination": "http://54.79.211.48:3002/api/$1" },
       { "source": "/(.*)", "destination": "/index.html" }
     ],
     "headers": [
@@ -34,7 +35,7 @@
     "env": {
       "NODE_ENV": "production",
       "GENERATE_SOURCEMAP": "false",
-      "REACT_APP_API_BASE_URL": "http://54.79.211.48:3002"
+      "REACT_APP_API_BASE_URL": "https://lovlechat-gkisl9vzq-malshues-projects.vercel.app"
     }
   }
   
