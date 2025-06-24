@@ -7,15 +7,10 @@ const getApiBaseUrl = () => {
     return process.env.REACT_APP_API_BASE_URL;
   }
   
-  // 프로덕션 환경 - 현재 도메인에서 추론
+  // 프로덕션 환경 - EC2 백엔드 사용
   if (process.env.NODE_ENV === 'production') {
-    // 프론트엔드가 lovlechat.vercel.app이라면 백엔드는 lovlechat-backend.vercel.app 형태로 추론
-    const hostname = window.location.hostname;
-    if (hostname.includes('lovlechat.vercel.app')) {
-      return 'https://lovlechat-backend.vercel.app';
-    }
-    // 기본 백엔드 URL (수정 필요시 여기를 변경)
-    return 'https://lovlechat-dq4i.vercel.app';
+    // EC2 백엔드 서버 URL
+    return 'http://54.79.211.48:3002';
   }
   
   // 개발 환경 - Express 백엔드 포트 3002로 연결

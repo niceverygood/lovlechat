@@ -34,7 +34,7 @@
     "env": {
       "NODE_ENV": "production",
       "GENERATE_SOURCEMAP": "false",
-      "REACT_APP_API_BASE_URL": "https://lovlechat-backend.vercel.app"
+      "REACT_APP_API_BASE_URL": "http://54.79.211.48:3002"
     }
   }
   
