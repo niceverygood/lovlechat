@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { API_BASE_URL } from '../lib/openai';
 
 interface HeartData {
   hearts: number;
@@ -12,8 +13,6 @@ interface UseHeartsReturn {
   refreshHearts: () => Promise<void>;
   useHearts: (amount: number, description?: string, relatedId?: string) => Promise<boolean>;
 }
-
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3002';
 
 // 🔥 프로덕션 환경에서 극도로 강력한 캐싱 적용
 const isProduction = process.env.NODE_ENV === 'production';

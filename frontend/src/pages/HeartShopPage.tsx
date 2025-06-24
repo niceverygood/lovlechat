@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useHearts } from "../hooks/useHearts";
 import Toast from "../components/Toast";
+import { API_BASE_URL } from "../lib/openai";
 
 // 아임포트 타입 선언
 declare global {
@@ -87,7 +88,6 @@ export default function HeartShopPage() {
             setToast({ message: '결제 검증 중입니다...', type: 'success' });
             
             // 백엔드에 결제 검증 요청
-            const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:3002';
             const verifyResponse = await fetch(`${API_BASE_URL}/api/payment`, {
               method: 'POST',
               headers: {
