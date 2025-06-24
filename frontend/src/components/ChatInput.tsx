@@ -1,4 +1,4 @@
-import React, { memo, useState, useCallback, useRef } from 'react';
+import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
@@ -11,12 +11,49 @@ const ChatInput = memo(({ onSendMessage, loading, disabled }: ChatInputProps) =>
   const [isComposing, setIsComposing] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // 컴포넌트 마운트 시 입력창에 포커스
+  useEffect(() => {
+    if (inputRef.current && !disabled) {
+      inputRef.current.focus();
+    }
+  }, [disabled]);
+
+  // loading 상태가 false로 변경될 때마다 포커스 설정
+  useEffect(() => {
+    if (!loading && inputRef.current && !disabled) {
+      // 약간의 지연을 주어 DOM 업데이트가 완료된 후 포커스 설정
+      const timer = setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+        }
+      }, 50);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [loading, disabled]);
+
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || loading || disabled || isComposing) return;
     
     onSendMessage(input.trim());
     setInput("");
+    
+    // 메시지 전송 후 입력창에 포커스 유지 - 여러 번 시도
+    const focusInput = () => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    };
+    
+    // 즉시 포커스
+    focusInput();
+    
+    // 100ms 후에 다시 포커스
+    setTimeout(focusInput, 100);
+    
+    // 300ms 후에 마지막으로 포커스 (AI 응답 처리 고려)
+    setTimeout(focusInput, 300);
   }, [input, loading, disabled, isComposing, onSendMessage]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -47,8 +84,10 @@ const ChatInput = memo(({ onSendMessage, loading, disabled }: ChatInputProps) =>
     
     // 포커스를 다시 입력 필드로 이동하고 커서를 ** 사이에 위치시킴
     setTimeout(() => {
-      input.focus();
-      input.setSelectionRange(cursorPosition + 1, cursorPosition + 1);
+      if (input) {
+        input.focus();
+        input.setSelectionRange(cursorPosition + 1, cursorPosition + 1);
+      }
     }, 0);
   }, [loading, disabled]);
 

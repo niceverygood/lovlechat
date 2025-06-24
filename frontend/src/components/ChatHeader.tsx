@@ -1,5 +1,6 @@
 import React, { memo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { DEFAULT_PROFILE_IMAGE } from '../utils/constants';
 
 interface Character {
   id: number;
@@ -61,7 +62,7 @@ const ChatHeader = memo(({ character, onProfileClick, onMoreClick }: ChatHeaderP
           onClick={onProfileClick}
           onError={(e) => {
             e.currentTarget.onerror = null;
-            e.currentTarget.src = "/imgdefault.jpg";
+            e.currentTarget.src = DEFAULT_PROFILE_IMAGE;
           }}
         />
         <div>

@@ -18,7 +18,7 @@ const getApiBaseUrl = () => {
     return 'https://lovlechat-dq4i.vercel.app';
   }
   
-  // 개발 환경 - localhost의 백엔드 포트로 연결
+  // 개발 환경 - Express 백엔드 포트 3002로 연결
   return 'http://localhost:3002';
 };
 

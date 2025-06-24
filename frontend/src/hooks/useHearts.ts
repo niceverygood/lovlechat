@@ -223,6 +223,10 @@ export function useHearts(userId: string | null): UseHeartsReturn {
       return false;
     }
     
+    // 하트 차감 로그
+    if (amount < 0) {
+      console.log(`[하트 차감] userId: ${userId}, amount: ${amount}, before: ${hearts}`);
+    }
     try {
       const response = await fetch(`${API_BASE_URL}/api/hearts`, {
         method: 'POST',

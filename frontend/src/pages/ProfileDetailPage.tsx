@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import Skeleton from "../components/Skeleton";
 import { API_BASE_URL } from '../lib/openai';
 import CustomAlert from '../components/CustomAlert';
+import { DEFAULT_PROFILE_IMAGE, handleProfileImageError } from '../utils/constants';
 
 interface Persona {
   id: string;
@@ -67,10 +68,10 @@ export default function ProfileDetailPage() {
     <div style={{ background: "var(--color-bg)", minHeight: "100vh", paddingBottom: 80 }}>
       <div style={{ background: "var(--color-card)", borderRadius: 20, margin: 20, padding: 24, boxShadow: "0 2px 8px rgba(0,0,0,0.03)", display: "flex", flexDirection: "column", alignItems: "center" }}>
         <img
-          src={persona.avatar || "/imgdefault.jpg"}
+          src={persona.avatar || DEFAULT_PROFILE_IMAGE}
           alt={persona.name}
           style={{ width: 110, height: 110, borderRadius: "50%", objectFit: "cover", marginBottom: 16, border: "2px solid #eee" }}
-          onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = "/imgdefault.jpg"; }}
+          onError={handleProfileImageError}
         />
         <div style={{ fontWeight: 700, fontSize: 24, marginBottom: 8 }}>{persona.name}</div>
         <div style={{ color: "#888", fontSize: 16, marginBottom: 8 }}>{persona.gender} · {persona.age} · {persona.job}</div>

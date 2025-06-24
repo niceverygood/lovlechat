@@ -6,6 +6,7 @@ import { useHearts } from "../hooks/useHearts";
 import MessageBubble from "../components/MessageBubble";
 import ProfileDetailModal from "../components/ProfileDetailModal";
 import FavorDetailModal from "../components/FavorDetailModal";
+import FavorBubble from "../components/FavorBubble";
 import CustomAlert from "../components/CustomAlert";
 import Toast from "../components/Toast";
 import ChatInput from "../components/ChatInput";
@@ -13,6 +14,8 @@ import LoginPromptModal from "../components/LoginPromptModal";
 import { API_BASE_URL } from '../lib/openai';
 import { ChatSkeleton } from "../components/Skeleton";
 import { isGuestMode } from "../utils/guestMode";
+import { DEFAULT_PROFILE_IMAGE } from "../utils/constants";
+import { FAVOR_STAGES } from "../utils/favorUtils";
 import './ChatPage.css';
 
 interface Character {
@@ -59,7 +62,16 @@ export default function ChatPage() {
     habit?: string;
   }>({ name: "나", avatar: "/avatars/default-profile.png" });
   const [isPersonaLoading, setIsPersonaLoading] = useState(true);
-  const { messages, sendMessage, loading, favor, backgroundImageUrl } = useChat(id ?? "", personaId || "", persona.avatar, user?.uid, useHeartsFunction);
+  const { 
+    messages, 
+    loading, 
+    error, 
+    favor, 
+    favorChange, 
+    backgroundImageUrl,
+    sendMessage, 
+    reloadMessages 
+  } = useChat(id ? parseInt(id) : undefined, personaId || undefined);
   const [character, setCharacter] = useState<Character | null>(null);
   const [characterLoading, setCharacterLoading] = useState(true);
   const [days, setDays] = useState(1);
@@ -86,17 +98,33 @@ export default function ChatPage() {
   const [reportReason, setReportReason] = useState("");
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [guestMessageCount, setGuestMessageCount] = useState(0);
+  
+  // 호감도 말풍선 상태
+  const [showFavorBubble, setShowFavorBubble] = useState(false);
+  const [favorBubbleData, setFavorBubbleData] = useState<{
+    favorChange: number;
+    currentFavor: number;
+  } | null>(null);
 
-  // 단계별 정보
-  const STAGES = [
-    { label: "아는사이", min: 0, desc: "새로운 인연을 맺을 준비가 되었나요?", icon: "🤝" },
-    { label: "친구", min: 20, desc: "서로 웃고 떠들며 일상을 공유해요", icon: "😊" },
-    { label: "썸", min: 50, desc: "감정이 싹트며 설렘을 느껴요", icon: "💓" },
-    { label: "연인", min: 400, desc: "같이 시간을 보내며 둘만의 러브스토리를 만들어가요", icon: "💑" },
-    { label: "결혼", min: 4000, desc: "오랜 신뢰와 헌신으로 단단하게 쌓아온 깊은 사랑을 축하해요", icon: "💍" },
-  ];
-  const currentStageIdx = [...STAGES].reverse().findIndex(s => favor >= s.min);
-  const stageIdx = currentStageIdx === -1 ? 0 : STAGES.length - 1 - currentStageIdx;
+  // 단계별 정보 (아이콘과 설명 추가)
+  const STAGE_ICONS = {
+    '아는사이': '🤝',
+    '친구': '😊',
+    '썸': '💓',
+    '연인': '💑',
+    '결혼': '💍'
+  };
+  
+  const STAGE_DESCRIPTIONS = {
+    '아는사이': '새로운 인연을 맺을 준비가 되었나요?',
+    '친구': '서로 웃고 떠들며 일상을 공유해요',
+    '썸': '감정이 싹트며 설렘을 느껴요',
+    '연인': '같이 시간을 보내며 둘만의 러브스토리를 만들어가요',
+    '결혼': '오랜 신뢰와 헌신으로 단단하게 쌓아온 깊은 사랑을 축하해요'
+  };
+  
+  const currentStageIdx = [...FAVOR_STAGES].reverse().findIndex(s => favor >= s.min);
+  const stageIdx = currentStageIdx === -1 ? 0 : FAVOR_STAGES.length - 1 - currentStageIdx;
   const [selectedStageIdx, setSelectedStageIdx] = useState(stageIdx);
   useEffect(() => { setSelectedStageIdx(stageIdx); }, [stageIdx]);
 
@@ -112,24 +140,11 @@ export default function ChatPage() {
       .catch(() => setCharacterLoading(false));
   }, [id]);
 
-  // 메시지 영역 스크롤: 최초 진입시에는 즉시 최하단으로, 이후에는 부드럽게
-  const isFirstScroll = useRef(true);
-  useEffect(() => {
-    if (isFirstScroll.current && messagesContainerRef.current) {
-      // 첫 진입 시: 애니메이션 없이 즉시 최하단으로 이동
-      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
-      isFirstScroll.current = false;
-    } else if (messagesEndRef.current) {
-      // 이후 메시지들: 부드럽게 스크롤
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages]);
-
   useEffect(() => {
     if (personaId) {
       // 게스트 모드에서 persona=guest인 경우 특별 처리
       if (isGuestMode() && personaId === 'guest') {
-        setPersona({ name: "게스트", avatar: "/imgdefault.jpg" });
+        setPersona({ name: "게스트", avatar: DEFAULT_PROFILE_IMAGE });
         setIsPersonaLoading(false);
         return;
       }
@@ -146,7 +161,7 @@ export default function ChatPage() {
         .then(data => {
           console.log('Persona data:', data);
           if (data.ok) {
-            const avatar = data.persona.avatar || "/avatars/default-profile.png";
+            const avatar = data.persona.avatar || DEFAULT_PROFILE_IMAGE;
             const personaData = {
               name: data.persona.name,
               avatar,
@@ -166,7 +181,7 @@ export default function ChatPage() {
             };
             img.onerror = () => {
               console.log('Failed to load persona image, using default');
-              setPersona({ ...personaData, avatar: "/avatars/default-profile.png" });
+              setPersona({ ...personaData, avatar: DEFAULT_PROFILE_IMAGE });
               setIsPersonaLoading(false);
             };
             img.src = avatar;
@@ -174,7 +189,7 @@ export default function ChatPage() {
         })
         .catch(error => {
           console.error('Error fetching persona:', error);
-          setPersona({ name: "나", avatar: "/avatars/default-profile.png" });
+          setPersona({ name: "나", avatar: DEFAULT_PROFILE_IMAGE });
           setIsPersonaLoading(false);
         });
     } else {
@@ -199,22 +214,40 @@ export default function ChatPage() {
   useEffect(() => { favorRef.current = favor; }, [favor]);
 
   useEffect(() => {
-    if (!character || !persona) return;
-    if (favorRef.current === undefined) return;
-    const diff = favor - favorRef.current;
-    if (diff === 0) return;
-    if (diff > 0) {
-      setToast({
-        message: `축하합니다! ${character.name}${getPostposition(character.name)} ${persona.name}님의 호감도가 ${diff}만큼 증가 했습니다!`,
-        type: "success"
-      });
-    } else if (diff < 0) {
-      setToast({
-        message: `아쉬워요 ㅠ ${character.name}${getPostposition(character.name)} ${persona.name}님의 호감도가 ${-diff}만큼 감소 했습니다 :(`,
-        type: "error"
-      });
-    }
-  }, [favor]);
+    const handleFavorChange = (event: CustomEvent) => {
+      const { change, current, previous } = event.detail;
+      
+      if (change && change !== 0 && !isGuestMode()) {
+        // 호감도 말풍선 표시
+        setFavorBubbleData({
+          favorChange: change,
+          currentFavor: current
+        });
+        setShowFavorBubble(true);
+        
+        // 기존 토스트 메시지도 유지 (선택사항)
+        if (character && persona) {
+          if (change > 0) {
+            setToast({
+              message: `축하합니다! ${character.name}${getPostposition(character.name)} ${persona.name}님의 호감도가 ${change}만큼 증가했습니다! (${current}점)`,
+              type: "success"
+            });
+          } else if (change < 0) {
+            setToast({
+              message: `아쉬워요 ㅠ ${character.name}${getPostposition(character.name)} ${persona.name}님의 호감도가 ${Math.abs(change)}만큼 감소했습니다... (${current}점)`,
+              type: "error"
+            });
+          }
+        }
+      }
+    };
+
+    window.addEventListener('favorChange', handleFavorChange as EventListener);
+    
+    return () => {
+      window.removeEventListener('favorChange', handleFavorChange as EventListener);
+    };
+  }, [character, persona]);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowNotice(false), 3000);
@@ -239,7 +272,38 @@ export default function ChatPage() {
     }
   }, [messages]);
 
+  // 채팅방 진입 시 최초 한 번만 최하단 스크롤 (애니메이션 없음)
+  const hasInitialScrolled = useRef(false);
+  useEffect(() => {
+    if (messages && messages.length > 0 && !hasInitialScrolled.current && messagesContainerRef.current) {
+      // DOM 렌더링 완료 후 스크롤
+      setTimeout(() => {
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+          hasInitialScrolled.current = true;
+          console.log('🏠 채팅방 진입: 최근 메시지로 즉시 이동 완료');
+        }
+      }, 0);
+    }
+  }, [messages]);
 
+  // 채팅 진행 중 새 메시지 추가 시 자동 스크롤
+  const prevMessageCountRef = useRef(0);
+  useEffect(() => {
+    if (hasInitialScrolled.current && messages && messages.length > prevMessageCountRef.current && messagesContainerRef.current) {
+      // 이미 초기 스크롤된 후, 새 메시지가 추가될 때만 부드러운 스크롤
+      setTimeout(() => {
+        if (messagesContainerRef.current) {
+          messagesContainerRef.current.scrollTo({
+            top: messagesContainerRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+          console.log('💬 새 메시지: 부드러운 스크롤 완료');
+        }
+      }, 100);
+    }
+    prevMessageCountRef.current = messages?.length || 0;
+  }, [messages]);
 
   const handleProfileClick = (profile: {
     id: string;
@@ -287,9 +351,9 @@ export default function ChatPage() {
         return;
       }
     }
-    
-    // 일반 메시지 전송
-    return sendMessage(message);
+    // 일반 메시지 전송 후 하트 잔액 갱신
+    await sendMessage(message);
+    await refreshHearts();
   };
 
   const handleLeaveChat = async () => {
@@ -328,6 +392,31 @@ export default function ChatPage() {
   if (characterLoading || !character) {
     return <ChatSkeleton />;
   }
+
+  // 디버깅: messages 상태 확인
+  console.log('🏠 ChatPage 렌더링 상세:', { 
+    timestamp: new Date().toISOString(),
+    messages: messages, 
+    messagesLength: messages?.length, 
+    loading: loading,
+    hasMessages: messages && messages.length > 0,
+    condition: !messages || messages.length === 0,
+    firstMessage: messages?.[0],
+    messageTypes: messages?.map(m => typeof m),
+    // 📍 useChat 파라미터 디버깅
+    id: id,
+    parsedId: id ? parseInt(id) : undefined,
+    personaId: personaId,
+    personaIdAfterOr: personaId || undefined,
+    urlSearch: location.search,
+    // 🔍 메시지 상세 정보
+    messageDetails: messages?.map((msg, idx) => ({
+      index: idx,
+      id: msg.id,
+      text: msg.text?.substring(0, 20) + '...',
+      sender: msg.sender
+    }))
+  });
 
   if (!messages || messages.length === 0) {
     // 채팅 내역이 없을 때: 상단 캐릭터 정보/첫 장면/첫 대사만 보여주고, 메시지 영역은 비워둠
@@ -418,11 +507,11 @@ export default function ChatPage() {
           // 일반 모드: 기존 관계 단계
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 16 }}>
-              {STAGES.map((s, idx) => (
+              {FAVOR_STAGES.map((s, idx) => (
                 <div key={s.label} style={{ display: 'flex', alignItems: 'center', opacity: idx === stageIdx ? 1 : 0.4, margin: '0 2px' }}>
-                  <span style={{ fontSize: 16, marginRight: 2 }}>{s.icon}</span>
+                  <span style={{ fontSize: 16, marginRight: 2 }}>{STAGE_ICONS[s.label as keyof typeof STAGE_ICONS]}</span>
                   <span style={{ fontWeight: idx === stageIdx ? 700 : 500, color: idx === stageIdx ? '#ff4081' : '#bbb', fontSize: 14 }}>{s.label}</span>
-                  {idx < STAGES.length - 1 && <span style={{ margin: '0 2px', color: '#bbb' }}>/</span>}
+                  {idx < FAVOR_STAGES.length - 1 && <span style={{ margin: '0 2px', color: '#bbb' }}>/</span>}
                 </div>
               ))}
             </div>
@@ -444,7 +533,8 @@ export default function ChatPage() {
             overflowY: "auto",
             padding: "0 0 16px 0",
             display: "flex",
-            flexDirection: "column"
+            flexDirection: "column",
+            scrollBehavior: "auto"
           }}
         >
           {/* 첫 장면/첫대사 표시 */}
@@ -458,6 +548,120 @@ export default function ChatPage() {
               <b>첫 대사</b><br />{character.firstMessage}
             </div>
           )}
+          {/* 메시지 리스트 */}
+          {messages.map((msg, idx) => {
+            console.log(`💬 메시지 ${idx + 1} 렌더링:`, msg);
+            return (
+              <div key={idx} style={{ padding: "0 16px", marginBottom: 8 }}>
+                <MessageBubble
+                message={{
+                  sender: msg.sender,
+                  text: msg.message,
+                  avatar: (msg.sender as any) === "ai" || (msg.sender as any) === "assistant" || msg.sender === "character"
+                    ? msg.characterProfileImg || character.profileImg || DEFAULT_PROFILE_IMAGE
+                    : persona.avatar || DEFAULT_PROFILE_IMAGE,
+                  characterName: msg.characterName,
+                  characterProfileImg: msg.characterProfileImg,
+                  characterAge: msg.characterAge,
+                  characterJob: msg.characterJob
+                }}
+                onProfileClick={() => {
+                  if ((msg.sender as any) === "ai" || (msg.sender as any) === "assistant" || msg.sender === "character") {
+                    handleProfileClick({
+                      id: character.id.toString(),
+                      name: msg.characterName || character.name,
+                      avatar: msg.characterProfileImg || character.profileImg,
+                      age: (msg.characterAge || character.age)?.toString(),
+                      job: msg.characterJob || character.job,
+                      info: character.info,
+                      habit: character.habit
+                    });
+                  } else if (msg.sender === "user") {
+                    handleProfileClick({
+                      id: personaId ?? "",
+                      name: persona.name,
+                      avatar: persona.avatar ?? "",
+                      gender: persona.gender,
+                      age: persona.age,
+                      job: persona.job,
+                      info: persona.info,
+                      habit: persona.habit
+                    });
+                  }
+                }}
+              />
+            </div>
+            );
+          })}
+          {/* ChatGPT 스타일 로딩 인디케이터 */}
+          {loading && (
+            <div style={{ padding: '0 16px', marginBottom: 8, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              {/* 캐릭터 프로필 이미지 */}
+              <img
+                src={character.profileImg || DEFAULT_PROFILE_IMAGE}
+                alt={character.name}
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  flexShrink: 0,
+                  marginTop: 4
+                }}
+              />
+              {/* 로딩 말풍선 */}
+              <div style={{
+                background: 'var(--color-card)',
+                color: '#999',
+                borderRadius: 18,
+                padding: '12px 16px',
+                fontSize: 14,
+                display: 'inline-block',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                border: '1px solid var(--color-border)',
+                position: 'relative'
+              }}>
+                <span className="chat-loading-dots">●●●</span>
+              </div>
+              <style>{`
+                .chat-loading-dots {
+                  display: inline-block;
+                  font-size: 14px;
+                  letter-spacing: 2px;
+                  color: #ff4081;
+                  animation: chat-dots-blink 1.4s infinite;
+                }
+                @keyframes chat-dots-blink {
+                  0%, 80%, 100% { 
+                    opacity: 0.3; 
+                  }
+                  40% { 
+                    opacity: 1; 
+                  }
+                }
+                .chat-loading-dots:nth-child(1) {
+                  animation-delay: 0s;
+                }
+                .chat-loading-dots:nth-child(2) {
+                  animation-delay: 0.2s;
+                }
+                .chat-loading-dots:nth-child(3) {
+                  animation-delay: 0.4s;
+                }
+              `}</style>
+            </div>
+          )}
+          {/* 호감도 변화 말풍선 */}
+          {showFavorBubble && favorBubbleData && (
+            <FavorBubble
+              favorChange={favorBubbleData.favorChange}
+              currentFavor={favorBubbleData.currentFavor}
+              onAnimationEnd={() => {
+                setShowFavorBubble(false);
+                setFavorBubbleData(null);
+              }}
+            />
+          )}
+          <div ref={messagesEndRef} />
         </div>
         {/* 입력 영역 */}
         <ChatInput
@@ -505,13 +709,13 @@ export default function ChatPage() {
         <div style={{ display: "flex", alignItems: "center" }}>
           <button onClick={() => navigate('/home')} style={{ background: "none", border: "none", fontSize: 24, marginRight: 12, cursor: "pointer", color: "#fff" }}>&larr;</button>
           <img
-            src={character.profileImg}
+            src={character.profileImg || DEFAULT_PROFILE_IMAGE}
             alt={character.name}
             style={{ width: 40, height: 40, borderRadius: "50%", marginRight: 12, cursor: "pointer" }}
             onClick={() => handleProfileClick({
               id: character.id.toString(),
               name: character.name,
-              avatar: character.profileImg,
+              avatar: character.profileImg || DEFAULT_PROFILE_IMAGE,
               age: character.age?.toString(),
               job: character.job,
               info: character.info,
@@ -564,11 +768,11 @@ export default function ChatPage() {
             // 일반 모드: 기존 관계 단계
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 16 }}>
-                {STAGES.map((s, idx) => (
+                {FAVOR_STAGES.map((s, idx) => (
                   <div key={s.label} style={{ display: 'flex', alignItems: 'center', opacity: idx === stageIdx ? 1 : 0.4, margin: '0 2px' }}>
-                    <span style={{ fontSize: 16, marginRight: 2 }}>{s.icon}</span>
+                    <span style={{ fontSize: 16, marginRight: 2 }}>{STAGE_ICONS[s.label as keyof typeof STAGE_ICONS]}</span>
                     <span style={{ fontWeight: idx === stageIdx ? 700 : 500, color: idx === stageIdx ? '#ff4081' : '#bbb', fontSize: 14 }}>{s.label}</span>
-                    {idx < STAGES.length - 1 && <span style={{ margin: '0 2px', color: '#bbb' }}>/</span>}
+                    {idx < FAVOR_STAGES.length - 1 && <span style={{ margin: '0 2px', color: '#bbb' }}>/</span>}
                   </div>
                 ))}
               </div>
@@ -590,7 +794,8 @@ export default function ChatPage() {
           overflowY: "auto",
           padding: "0 0 16px 0",
           display: "flex",
-          flexDirection: "column"
+          flexDirection: "column",
+          scrollBehavior: "auto"
         }}
       >
         {/* 첫 장면/첫대사 표시 */}
@@ -605,22 +810,24 @@ export default function ChatPage() {
           </div>
         )}
         {/* 메시지 리스트 */}
-        {messages.map((msg, idx) => (
-          <div key={idx} style={{ padding: "0 16px", marginBottom: 8 }}>
-            <MessageBubble
+        {messages.map((msg, idx) => {
+          console.log(`💬 메시지 ${idx + 1} 렌더링:`, msg);
+          return (
+            <div key={idx} style={{ padding: "0 16px", marginBottom: 8 }}>
+              <MessageBubble
               message={{
                 sender: msg.sender,
                 text: msg.message,
-                avatar: msg.sender === "character"
-                  ? msg.characterProfileImg || character.profileImg || "/avatars/default-profile.png"
-                  : persona.avatar || "/imgdefault.jpg",
+                avatar: (msg.sender as any) === "ai" || (msg.sender as any) === "assistant" || msg.sender === "character"
+                  ? msg.characterProfileImg || character.profileImg || DEFAULT_PROFILE_IMAGE
+                  : persona.avatar || DEFAULT_PROFILE_IMAGE,
                 characterName: msg.characterName,
                 characterProfileImg: msg.characterProfileImg,
                 characterAge: msg.characterAge,
                 characterJob: msg.characterJob
               }}
               onProfileClick={() => {
-                if (msg.sender === "character") {
+                if ((msg.sender as any) === "ai" || (msg.sender as any) === "assistant" || msg.sender === "character") {
                   handleProfileClick({
                     id: character.id.toString(),
                     name: msg.characterName || character.name,
@@ -645,48 +852,75 @@ export default function ChatPage() {
               }}
             />
           </div>
-        ))}
+          );
+        })}
         {/* ChatGPT 스타일 로딩 인디케이터 */}
         {loading && (
-          <div style={{ padding: '0 16px', marginBottom: 8, display: 'flex', alignItems: 'center' }}>
+          <div style={{ padding: '0 16px', marginBottom: 8, display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+            {/* 캐릭터 프로필 이미지 */}
+            <img
+              src={character.profileImg || DEFAULT_PROFILE_IMAGE}
+              alt={character.name}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                flexShrink: 0,
+                marginTop: 4
+              }}
+            />
+            {/* 로딩 말풍선 */}
             <div style={{
-              background: '#222',
-              color: '#fff',
+              background: 'var(--color-card)',
+              color: '#999',
               borderRadius: 18,
-              padding: '6px 9px',
-              fontSize: 9,
+              padding: '12px 16px',
+              fontSize: 14,
               display: 'inline-block',
-              minWidth: 27,
-              letterSpacing: 1,
-              fontWeight: 500,
-              boxShadow: '0 2px 8px #0002',
-              marginLeft: 0
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              border: '1px solid var(--color-border)',
+              position: 'relative'
             }}>
               <span className="chat-loading-dots">●●●</span>
             </div>
             <style>{`
               .chat-loading-dots {
                 display: inline-block;
-                font-size: 11px;
-                letter-spacing: 1px;
-              }
-              .chat-loading-dots:after {
-                content: '';
-                display: inline-block;
-                width: 0;
-                height: 0;
-              }
-              .chat-loading-dots {
-                animation: chat-dots-blink 1.2s infinite steps(3);
+                font-size: 14px;
+                letter-spacing: 2px;
+                color: #ff4081;
+                animation: chat-dots-blink 1.4s infinite;
               }
               @keyframes chat-dots-blink {
-                0% { opacity: 1; }
-                33% { opacity: 0.5; }
-                66% { opacity: 0.2; }
-                100% { opacity: 1; }
+                0%, 80%, 100% { 
+                  opacity: 0.3; 
+                }
+                40% { 
+                  opacity: 1; 
+                }
+              }
+              .chat-loading-dots:nth-child(1) {
+                animation-delay: 0s;
+              }
+              .chat-loading-dots:nth-child(2) {
+                animation-delay: 0.2s;
+              }
+              .chat-loading-dots:nth-child(3) {
+                animation-delay: 0.4s;
               }
             `}</style>
           </div>
+        )}
+        {/* 호감도 변화 말풍선 */}
+        {showFavorBubble && favorBubbleData && (
+          <FavorBubble
+            favorChange={favorBubbleData.favorChange}
+            currentFavor={favorBubbleData.currentFavor}
+            onAnimationEnd={() => {
+              setShowFavorBubble(false);
+              setFavorBubbleData(null);
+            }}
+          />
         )}
         <div ref={messagesEndRef} />
       </div>

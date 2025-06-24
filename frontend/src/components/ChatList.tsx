@@ -5,6 +5,7 @@ import { API_BASE_URL } from '../lib/openai';
 import CustomAlert from './CustomAlert';
 import LoginPromptModal from './LoginPromptModal';
 import { isGuestMode } from '../utils/guestMode';
+import { DEFAULT_PROFILE_IMAGE, handleProfileImageError } from '../utils/constants';
 
 export default function ChatList() {
   const navigate = useNavigate();
@@ -26,7 +27,7 @@ export default function ChatList() {
         .then(res => res.json())
         .then(data => {
           console.log('게스트 채팅목록 데이터:', data);
-          if (data.ok) setChats(data.chats);
+          if (data.ok) setChats(data.chats || []);
         })
         .catch(error => {
           console.error('게스트 채팅목록 로드 실패:', error);
@@ -36,18 +37,18 @@ export default function ChatList() {
       fetch(`${API_BASE_URL}/api/chat/list?userId=${userId}`)
       .then(res => res.json())
       .then(data => {
-        if (data.ok) setChats(data.chats);
+        if (data.ok) setChats(data.chats || []);
       });
       fetch(`${API_BASE_URL}/api/persona?userId=${userId}`)
         .then(res => res.json())
         .then(data => {
-          if (data.ok) setPersonas(data.personas);
+          if (data.ok) setPersonas(data.personas || []);
         });
     }
   }, [user]);
 
   // 현재 존재하는 멀티프로필 id만 추출 (모두 문자열로 변환)
-  const validPersonaIds = personas.map(p => p.id?.toString());
+  const validPersonaIds = (personas || []).map(p => p.id?.toString());
 
   // 채팅방 나가기(삭제)
   const handleLeaveChat = async (chat: any) => {
@@ -77,10 +78,10 @@ export default function ChatList() {
           </button>
         )}
       </div>
-      {chats.length === 0 ? (
+      {(chats || []).length === 0 ? (
         <div style={{ color: "#888", textAlign: "center", marginTop: 40 }}>대화 내역이 없습니다.</div>
       ) : (
-        chats
+        (chats || [])
           .filter(chat => isGuestMode() ? true : validPersonaIds.includes(chat.personaId?.toString()))
           .map((chat) => (
           <div
@@ -117,10 +118,10 @@ export default function ChatList() {
             }}
           >
             <img
-                src={chat.profileImg || "/imgdefault.jpg"}
+                src={chat.profileImg || DEFAULT_PROFILE_IMAGE}
               alt={chat.name}
                 style={{ width: 48, height: 48, borderRadius: '50%', objectFit: 'cover' }}
-                onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = "/imgdefault.jpg"; }}
+                onError={handleProfileImageError}
             />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 'bold', fontSize: '1.1rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: '#fff' }}>{chat.name}</div>
@@ -128,10 +129,10 @@ export default function ChatList() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginLeft: 24, minWidth: 60 }}>
                 <img
-                  src={chat.personaAvatar || "/imgdefault.jpg"}
+                  src={chat.personaAvatar || DEFAULT_PROFILE_IMAGE}
                   alt={chat.personaName || "프로필"}
                   style={{ width: 40, height: 40, borderRadius: '50%', objectFit: 'cover', marginBottom: 2 }}
-                  onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = "/imgdefault.jpg"; }}
+                  onError={handleProfileImageError}
                 />
                 <span style={{ fontSize: 12, color: '#bbb', maxWidth: 60, textAlign: 'center', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{chat.personaName || '유저프로필'}</span>
               </div>

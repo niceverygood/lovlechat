@@ -10,6 +10,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useHearts } from "../hooks/useHearts";
 import { API_BASE_URL } from '../lib/openai';
 import CustomAlert from '../components/CustomAlert';
+import { DEFAULT_PROFILE_IMAGE, handleProfileImageError } from '../utils/constants';
 
 interface Character {
   id: number;
@@ -46,8 +47,8 @@ interface Persona {
   habit?: string;
 }
 
-// 프로필 이미지 경로 상수로 지정
-const DEFAULT_PROFILE_IMG = "/imgdefault.jpg";
+// 프로필 이미지 경로 상수로 지정 (이제 constants에서 import)
+
 
 // HeartButton 컴포넌트 분리
 function HeartButton({ count }: { count: number }) {
@@ -77,7 +78,7 @@ export default function MyPage() {
   const [showProfileEditModal, setShowProfileEditModal] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<Persona | null>(null);
   const userId = user?.uid || "";
-  const [userProfile, setUserProfile] = useState<{ name: string; avatar: string }>({ name: user?.displayName || "사용자", avatar: "/imgdefault.jpg" });
+  const [userProfile, setUserProfile] = useState<{ name: string; avatar: string }>({ name: user?.displayName || "사용자", avatar: DEFAULT_PROFILE_IMAGE });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showProfileCreateModal, setShowProfileCreateModal] = useState(false);
   const [showCharacterEditModal, setShowCharacterEditModal] = useState(false);
@@ -142,7 +143,7 @@ export default function MyPage() {
     const savedUserProfile = localStorage.getItem('userProfile');
     if (savedUserProfile) {
       const profile = JSON.parse(savedUserProfile);
-      setUserProfile({ name: profile.name || user?.displayName || "사용자", avatar: profile.avatar || "/imgdefault.jpg" });
+      setUserProfile({ name: profile.name || user?.displayName || "사용자", avatar: profile.avatar || DEFAULT_PROFILE_IMAGE });
     }
 
     // 팔로워/팔로잉 수 불러오기 (추후 실제 API 연동)
@@ -310,16 +311,11 @@ export default function MyPage() {
           }}>
             <div style={{ display: "flex", alignItems: "center" }}>
               <img
-                src={userProfile.avatar || DEFAULT_PROFILE_IMG}
+                src={userProfile.avatar || DEFAULT_PROFILE_IMAGE}
                 alt="프로필"
                 style={{ width: 60, height: 60, borderRadius: "50%", marginRight: 16, objectFit: "cover", background: "#222", border: "2px solid #333", cursor: "pointer" }}
                 onClick={() => setShowProfileDetailModal(true)}
-                onError={e => {
-                  if (!e.currentTarget.src.endsWith("/imgdefault.jpg")) {
-                  e.currentTarget.onerror = null;
-                    e.currentTarget.src = "/imgdefault.jpg";
-                  }
-                }}
+                onError={handleProfileImageError}
               />
               <div>
                 <div style={{ fontWeight: 700, fontSize: 20 }}>{userProfile.name}</div>
@@ -369,16 +365,11 @@ export default function MyPage() {
             {personas.map((p) => (
               <div key={p.id} style={{ display: "flex", alignItems: "center", background: "var(--color-card-alt)", borderRadius: 12, padding: 12, marginBottom: 10 }}>
                     <img
-                      src={p.avatar || DEFAULT_PROFILE_IMG}
+                      src={p.avatar || DEFAULT_PROFILE_IMAGE}
                       alt={p.name}
                   style={{ width: 40, height: 40, borderRadius: "50%", marginRight: 12, objectFit: "cover", background: "#222", border: "1.5px solid #333", cursor: 'pointer' }}
                   onClick={() => { setSelectedProfile(p); setShowProfileDetailModal(true); }}
-                    onError={e => {
-                  if (!e.currentTarget.src.endsWith("/imgdefault.jpg")) {
-                      e.currentTarget.onerror = null;
-                    e.currentTarget.src = "/imgdefault.jpg";
-                  }
-                    }}
+                    onError={handleProfileImageError}
                   />
                 <span style={{ fontWeight: 600, fontSize: 16 }}>{p.name}</span>
               <button
@@ -405,16 +396,11 @@ export default function MyPage() {
               characters.map(char => (
                 <div key={char.id} style={{ display: "flex", alignItems: "center", background: "var(--color-card)", borderRadius: 12, padding: 12, marginBottom: 12 }}>
                   <img
-                    src={char.profileImg || DEFAULT_PROFILE_IMG}
+                    src={char.profileImg || DEFAULT_PROFILE_IMAGE}
                     alt={char.name}
                     style={{ width: 48, height: 48, borderRadius: "50%", marginRight: 12, objectFit: "cover", cursor: "pointer" }}
                     onClick={() => navigate(`/character/${char.id}`)}
-                    onError={e => {
-                      if (!e.currentTarget.src.endsWith("/imgdefault.jpg")) {
-                      e.currentTarget.onerror = null;
-                        e.currentTarget.src = "/imgdefault.jpg";
-                      }
-                    }}
+                    onError={handleProfileImageError}
                   />
                   <span style={{ fontWeight: 600, fontSize: 16 }}>{char.name}</span>
                   <button 
@@ -458,15 +444,10 @@ export default function MyPage() {
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 24 }}>
               <div style={{ position: 'relative' }}>
                 <img
-                  src={userProfile.avatar || DEFAULT_PROFILE_IMG}
+                  src={userProfile.avatar || DEFAULT_PROFILE_IMAGE}
                   alt="프로필"
                   style={{ width: 100, height: 100, borderRadius: '50%', objectFit: 'cover', border: '3px solid #fff' }}
-                  onError={e => {
-                    if (!e.currentTarget.src.endsWith("/imgdefault.jpg")) {
-                      e.currentTarget.onerror = null;
-                      e.currentTarget.src = "/imgdefault.jpg";
-                    }
-                  }}
+                  onError={handleProfileImageError}
                 />
                 <button
                   onClick={handleUserProfileImageClick}
@@ -489,7 +470,7 @@ export default function MyPage() {
                   }}
                   aria-label="프로필 사진 변경"
                 >
-                  ✏️
+                  +
                 </button>
                 <input
                   ref={fileInputRef}
@@ -608,7 +589,7 @@ export default function MyPage() {
             job: selectedProfile.job || '',
             info: selectedProfile.info || '',
             habit: selectedProfile.habit || '',
-            avatar: selectedProfile.avatar || '/imgdefault.jpg'
+            avatar: selectedProfile.avatar || DEFAULT_PROFILE_IMAGE
           }}
           onSave={handleProfileSave}
         />
@@ -627,7 +608,7 @@ export default function MyPage() {
             job: '',
             info: '',
             habit: '',
-            avatar: '/imgdefault.jpg'
+            avatar: DEFAULT_PROFILE_IMAGE
           }}
           onSave={handleProfileCreate}
           mode="create"

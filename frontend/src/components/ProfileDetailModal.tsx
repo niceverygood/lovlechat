@@ -1,4 +1,5 @@
 import React from 'react';
+import { DEFAULT_PROFILE_IMAGE, handleProfileImageError } from '../utils/constants';
 
 interface ProfileDetailModalProps {
   isOpen: boolean;
@@ -72,7 +73,7 @@ export default function ProfileDetailModal({ isOpen, onClose, profile, isMe = fa
           marginBottom: 16 
         }}>
           <img
-            src={profile.avatar || "/imgdefault.jpg"}
+            src={profile.avatar || DEFAULT_PROFILE_IMAGE}
             alt={profile.name}
             style={{ 
               width: 80, 
@@ -81,7 +82,7 @@ export default function ProfileDetailModal({ isOpen, onClose, profile, isMe = fa
               objectFit: 'cover', 
               border: '3px solid #333' 
             }}
-            onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = '/imgdefault.jpg'; }}
+            onError={handleProfileImageError}
           />
         </div>
 

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import DefaultProfileImage from "./DefaultProfileImage";
 import CustomAlert from './CustomAlert';
+import { DEFAULT_PROFILE_IMAGE } from '../utils/constants';
 
 interface CharacterData {
   id: number;
@@ -348,7 +349,7 @@ export default function CharacterEditModal({ isOpen, onClose, characterData, onS
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
               <div style={{ position: 'relative', width: 80, height: 140, border: '2px dashed var(--color-point)', borderRadius: 16, background: '#18141a', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }} onClick={handleBackgroundImgClick}>
                 {(backgroundImg || profileImg) ? (
-                  <img src={backgroundImg || profileImg || '/imgdefault.jpg'} alt="배경" style={{ width: 80, height: 140, objectFit: 'cover', borderRadius: 16 }} />
+                  <img src={backgroundImg || profileImg || DEFAULT_PROFILE_IMAGE} alt="배경" style={{ width: 80, height: 140, objectFit: 'cover', borderRadius: 16 }} />
                 ) : (
                   <span style={{ color: '#ff4081', fontSize: 32, fontWeight: 700 }}>+</span>
                 )}

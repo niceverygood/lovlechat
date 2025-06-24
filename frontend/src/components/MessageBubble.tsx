@@ -1,4 +1,5 @@
 import React from "react";
+import { DEFAULT_PROFILE_IMAGE, handleProfileImageError } from '../utils/constants';
 
 export interface Msg {
   sender: "user" | "ai" | "character";
@@ -70,20 +71,20 @@ export default function MessageBubble({ message, onProfileClick }: Props) {
     }}>
       {isUser && message.avatar && (
         <img
-          src={message.avatar || "/imgdefault.jpg"}
+          src={message.avatar || DEFAULT_PROFILE_IMAGE}
           alt="me"
           style={{ width: 40, height: 40, borderRadius: '50%', marginLeft: 10, background: '#222', objectFit: 'cover', cursor: onProfileClick ? 'pointer' : 'default', border: '2px solid #fff' }}
           onClick={onProfileClick}
-          onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = "/imgdefault.jpg"; }}
+          onError={handleProfileImageError}
         />
       )}
       {isCharacter && message.avatar && (
         <img
-          src={message.avatar || "/imgdefault.jpg"}
+          src={message.avatar || DEFAULT_PROFILE_IMAGE}
           alt="character"
           style={{ width: 40, height: 40, borderRadius: '50%', marginRight: 10, background: '#222', objectFit: 'cover', cursor: onProfileClick ? 'pointer' : 'default', border: '2px solid #fff' }}
           onClick={onProfileClick}
-          onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = "/imgdefault.jpg"; }}
+          onError={handleProfileImageError}
         />
       )}
       <div

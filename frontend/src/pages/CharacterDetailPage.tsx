@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { API_BASE_URL } from '../lib/openai';
+import { DEFAULT_PROFILE_IMAGE, handleProfileImageError } from '../utils/constants';
 
 interface Character {
   id: number;
@@ -115,7 +116,7 @@ export default function CharacterDetailPage() {
           const profile = character.profileImg;
           // backgroundImg가 null, undefined, 빈 문자열이면 profileImg 사용
           if (!bg || bg.trim() === '') {
-            return profile || "/imgdefault.jpg";
+            return profile || DEFAULT_PROFILE_IMAGE;
           }
           return bg;
         })()}) center/cover no-repeat`, 
@@ -129,10 +130,10 @@ export default function CharacterDetailPage() {
         {/* 프로필/이름/나이/직업 오버레이 */}
         <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: '0 0 32px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 2 }}>
         <img
-          src={character.profileImg || "/imgdefault.jpg"}
+          src={character.profileImg || DEFAULT_PROFILE_IMAGE}
           alt={character.name}
             style={{ width: 92, height: 92, borderRadius: "50%", border: "3px solid #fff", objectFit: "cover", background: "#eee", marginBottom: 12 }}
-          onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = "/imgdefault.jpg"; }}
+          onError={handleProfileImageError}
         />
           <div style={{ fontWeight: 700, fontSize: 24, color: '#fff', marginBottom: 4, textShadow: '0 2px 8px rgba(0,0,0,0.25)' }}>{character.name}</div>
           <div style={{ fontWeight: 400, fontSize: 16, color: '#fff', opacity: 0.92, textShadow: '0 2px 8px rgba(0,0,0,0.18)' }}>{character.age ? `${character.age}살` : "나이 비공개"} · {character.job || "직업 비공개"}</div>
@@ -258,10 +259,10 @@ export default function CharacterDetailPage() {
                 display: 'flex', alignItems: 'center', gap: 16
               }} onClick={() => setSelectedPersona(p.id)}>
                 <img
-                  src={p.avatar || "/imgdefault.jpg"}
+                  src={p.avatar || DEFAULT_PROFILE_IMAGE}
                   alt={p.name}
                   style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', background: '#333', border: selectedPersona === p.id ? '2px solid #ff4081' : '2px solid #333', marginRight: 8 }}
-                  onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = "/imgdefault.jpg"; }}
+                  onError={handleProfileImageError}
                 />
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: 16, color: selectedPersona === p.id ? '#ff4081' : '#fff' }}>{p.name}</div>

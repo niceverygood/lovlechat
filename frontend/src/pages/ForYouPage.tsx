@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import BottomNav from "../components/BottomNav";
 import { useNavigate } from "react-router-dom";
-import { FiHeart, FiPlus, FiEdit3, FiX } from "react-icons/fi";
+import { FiHeart, FiPlus, FiX } from "react-icons/fi";
 import ProfileEditModal from "../components/ProfileEditModal";
 import { useAuth } from "../hooks/useAuth";
 import { useHearts } from "../hooks/useHearts";
@@ -9,6 +9,7 @@ import { API_BASE_URL } from '../lib/openai';
 import CustomAlert from '../components/CustomAlert';
 import LoginPromptModal from '../components/LoginPromptModal';
 import { isGuestMode, GUEST_LIMITS, getGuestLimitMessage } from '../utils/guestMode';
+import { DEFAULT_PROFILE_IMAGE, handleProfileImageError } from '../utils/constants';
 
 interface Character {
   id: number;
@@ -36,7 +37,7 @@ interface Persona {
 }
 
 // 프로필 이미지 경로 상수로 지정
-const DEFAULT_PROFILE_IMG = "/imgdefault.jpg"; // 실제 파일 경로로 교체 필요
+const DEFAULT_PROFILE_IMG = DEFAULT_PROFILE_IMAGE;
 
 // 좋아요(하트) 상태 관리
 const FAVOR_API = `${API_BASE_URL}/api/character/favor`;
@@ -91,19 +92,7 @@ function CharacterDetailModal({ isOpen, onClose, character, onChatClick }: { isO
             })()}
             alt={character.name}
             style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center', zIndex: 1, filter: 'brightness(0.92)' }}
-            onError={e => {
-              // 첫 번째 실패: backgroundImg -> profileImg로 변경
-              if (e.currentTarget.src === character.backgroundImg && character.profileImg) {
-                e.currentTarget.onerror = null;
-                e.currentTarget.src = character.profileImg;
-                return;
-              }
-              // 두 번째 실패: profileImg -> DEFAULT_PROFILE_IMG로 변경
-              if (!e.currentTarget.src.endsWith(DEFAULT_PROFILE_IMG)) {
-              e.currentTarget.onerror = null;
-              e.currentTarget.src = DEFAULT_PROFILE_IMG;
-              }
-            }}
+            onError={handleProfileImageError}
           />
         {/* 카테고리, by */}
           <div style={{ position: 'absolute', left: 18, top: 18, display: 'flex', alignItems: 'center', gap: 10, zIndex: 2 }}>
@@ -117,11 +106,7 @@ function CharacterDetailModal({ isOpen, onClose, character, onChatClick }: { isO
             src={character.profileImg || DEFAULT_PROFILE_IMG}
             alt={character.name}
             style={{ width: 80, height: 80, borderRadius: '50%', objectFit: 'cover', border: '3px solid #fff', background: '#eee', marginBottom: 8, boxShadow: '0 2px 12px #0003' }}
-            onError={e => {
-              if (e.currentTarget.src.endsWith(DEFAULT_PROFILE_IMG)) return;
-              e.currentTarget.onerror = null;
-              e.currentTarget.src = DEFAULT_PROFILE_IMG;
-            }}
+            onError={handleProfileImageError}
           />
           <div style={{ fontWeight: 700, fontSize: 22, color: '#fff', marginBottom: 2 }}>{character.name}</div>
           <div style={{ fontSize: 16, color: '#ccc', marginBottom: 10 }}>{character.age}살 · {character.job}</div>
@@ -490,7 +475,7 @@ export default function ForYouPage() {
     if (!newPersonaName) return;
     setPersonas(prev => [
       ...prev,
-      { id: newPersonaName, name: newPersonaName, avatar: newPersonaAvatar || "/imgdefault.jpg" }
+      { id: newPersonaName, name: newPersonaName, avatar: newPersonaAvatar || DEFAULT_PROFILE_IMAGE }
     ]);
     setSelectedPersona(newPersonaName);
     setNewPersonaName("");
@@ -513,7 +498,7 @@ export default function ForYouPage() {
     const payload = {
       userId,
       name: creatorName,
-      avatar: creatorProfileImg || "/imgdefault.jpg",
+              avatar: creatorProfileImg || DEFAULT_PROFILE_IMAGE,
       gender: creatorGender,
       age: creatorAge,
       job: creatorJob,
@@ -610,10 +595,10 @@ export default function ForYouPage() {
             {managedPersonas.map(p => (
               <div key={p.id} style={{ display: "flex", alignItems: "center", background: "#232124", borderRadius: 16, padding: '18px 16px', marginBottom: 18, boxShadow: '0 2px 8px #0002', minHeight: 68 }}>
             <img
-                  src={p.avatar || "/imgdefault.jpg"}
+                  src={p.avatar || DEFAULT_PROFILE_IMAGE}
               alt={p.name}
                   style={{ width: 54, height: 54, borderRadius: "50%", marginRight: 18, objectFit: "cover", boxShadow: '0 2px 8px #0002' }}
-                  onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = "/imgdefault.jpg"; }}
+                  onError={handleProfileImageError}
             />
                 <span style={{ fontWeight: 700, fontSize: 19, color: '#fff' }}>{p.name}</span>
                 <button onClick={() => handleProfileEdit(p)} style={{ marginLeft: "auto", background: "none", border: "none", color: "#ff4081", fontSize: 18, fontWeight: 600, cursor: "pointer", padding: '0 8px' }}>수정</button>
@@ -679,7 +664,7 @@ export default function ForYouPage() {
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginTop: 16 }}>
         <div style={{ position: "relative", width: 110, height: 110, marginBottom: 16 }}>
           <img
-            src={creatorProfileImg || "/imgdefault.jpg"}
+            src={creatorProfileImg || DEFAULT_PROFILE_IMAGE}
             alt="프로필"
             style={{ width: 110, height: 110, borderRadius: "50%", objectFit: "cover", background: "#ffe5e5" }}
           />
@@ -691,7 +676,7 @@ export default function ForYouPage() {
             }}
             aria-label="프로필 사진 변경"
           >
-            <span role="img" aria-label="edit">✏️</span>
+            +
           </button>
           <input
             ref={fileInputRef}
@@ -776,7 +761,7 @@ export default function ForYouPage() {
           gender: updatedProfile.gender,
           age: updatedProfile.age,
           job: updatedProfile.job,
-          avatar: updatedProfile.avatar || '/imgdefault.jpg'
+          avatar: updatedProfile.avatar || DEFAULT_PROFILE_IMAGE
         }),
       });
       if (response.ok) {
@@ -1206,10 +1191,10 @@ export default function ForYouPage() {
               {multiPersonas.map(p => (
                 <div key={p.id} style={{ display: "flex", alignItems: "center", background: selectedPersona === p.id ? "#2a1a22" : "#18171a", borderRadius: 18, padding: '20px 16px', marginBottom: 18, cursor: "pointer", minHeight: 72, boxShadow: selectedPersona === p.id ? '0 2px 12px #ff408122' : 'none', transition: 'background 0.2s' }} onClick={() => setSelectedPersona(p.id)}>
                 <img
-                    src={p.avatar || "/imgdefault.jpg"}
+                    src={p.avatar || DEFAULT_PROFILE_IMAGE}
                   alt={p.name}
                     style={{ width: 56, height: 56, borderRadius: "50%", marginRight: 18, objectFit: "cover", boxShadow: '0 2px 8px #0002' }}
-                    onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = "/imgdefault.jpg"; }}
+                    onError={handleProfileImageError}
                 />
                   <span style={{ fontWeight: 700, fontSize: 20, color: "#fff", letterSpacing: 0.5 }}>{p.name}</span>
                   {selectedPersona === p.id && <span style={{ marginLeft: "auto", color: "#fff", fontSize: 32, fontWeight: 900 }}>✔️</span>}
@@ -1271,7 +1256,7 @@ export default function ForYouPage() {
             job: editProfile.job || '',
             info: editProfile.info || '',
             habit: editProfile.habit || '',
-            avatar: editProfile.avatar || '/imgdefault.jpg'
+            avatar: editProfile.avatar || DEFAULT_PROFILE_IMAGE
           }}
           onSave={handleProfileSave}
         />
@@ -1289,7 +1274,7 @@ export default function ForYouPage() {
             job: '',
             info: '',
             habit: '',
-            avatar: '/imgdefault.jpg'
+            avatar: DEFAULT_PROFILE_IMAGE
           }}
           onSave={handleProfileCreate}
           mode="create"

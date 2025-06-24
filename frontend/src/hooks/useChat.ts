@@ -1,12 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { API_BASE_URL } from '../lib/openai';
+import { useAuth } from './useAuth';
+import { corsRequest } from '../lib/openai';
 
 // === 타입 정의 ===
 interface Message {
   id: string;
-  text: string; // MessageBubble 호환을 위해 필수로 변경
+  text: string;
   message: string;
-  sender: 'user' | 'character' | 'ai'; // 백엔드 API와 일치하도록 수정
+  sender: 'user' | 'character' | 'ai';
   timestamp: string;
   characterName?: string;
   characterProfileImg?: string;
@@ -20,6 +21,7 @@ interface ChatState {
   loading: boolean;
   error: string | null;
   favor: number;
+  favorChange: number;
   backgroundImageUrl?: string;
 }
 
@@ -38,325 +40,330 @@ interface Character {
 interface ChatListItem {
   characterId: number;
   personaId: string;
-  lastMessage: string;
-  lastSender: 'user' | 'character';
-  lastMessageAt: string;
-  personaName: string;
-  personaAvatar: string;
   name: string;
   profileImg: string;
+  lastMessage: string;
+  lastMessageTime: string;
 }
 
-// === 🚀 극한 성능 설정 ===
-const DEBOUNCE_DELAY = 30; // 30ms 초고속 디바운스
-const CACHE_TTL = 5000; // 5초 캐시
-const REQUEST_TIMEOUT = 3000; // 3초 타임아웃
-const MAX_RETRIES = 1; // 최대 1회 재시도
-
-// === 전역 캐시 및 요청 관리 ===
-const globalCache = new Map<string, { data: any; timestamp: number }>();
-const activeRequests = new Map<string, Promise<any>>();
-const debounceTimers = new Map<string, NodeJS.Timeout>();
-
-// === 🔥 초고속 HTTP 클라이언트 ===
-const ultraFetch = async <T = any>(
-  url: string,
-  options: RequestInit = {},
-  timeout = REQUEST_TIMEOUT
-): Promise<T> => {
-  
-  const cacheKey = `${options.method || 'GET'}:${url}:${JSON.stringify(options.body || {})}`;
-  
-  // 1. 캐시 확인 (GET 요청만)
-  if (!options.method || options.method === 'GET') {
-    const cached = globalCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      return cached.data;
-    }
-  }
-  
-  // 2. 중복 요청 차단
-  if (activeRequests.has(cacheKey)) {
-    return activeRequests.get(cacheKey)!;
-  }
-  
-  // 3. 요청 실행
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-  
-  const requestPromise = (async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api${url}`, {
-        ...options,
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        }
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      
-      const data = await response.json();
-      
-      // GET 요청 결과 캐싱
-      if (!options.method || options.method === 'GET') {
-        globalCache.set(cacheKey, {
-          data,
-          timestamp: Date.now()
-        });
-        
-        // 캐시 크기 제한 (100개)
-        if (globalCache.size > 100) {
-          const oldestKey = globalCache.keys().next().value;
-          globalCache.delete(oldestKey);
-        }
-      }
-      
-      return data;
-      
-    } catch (error: any) {
-      // 타임아웃 시 캐시된 데이터 사용
-      if (error.name === 'AbortError') {
-        const staleData = globalCache.get(cacheKey);
-        if (staleData) {
-          return staleData.data;
-        }
-      }
-      throw error;
-    }
-  })();
-  
-  activeRequests.set(cacheKey, requestPromise);
-  
-  try {
-    const result = await requestPromise;
-    return result;
-  } finally {
-    activeRequests.delete(cacheKey);
-    clearTimeout(timeoutId);
-  }
-};
-
-// === 🚀 초고속 디바운스 ===
-const ultraDebounce = (func: Function, delay: number, key: string) => {
-  const existingTimer = debounceTimers.get(key);
-  if (existingTimer) {
-    clearTimeout(existingTimer);
-  }
-  
-  const timer = setTimeout(() => {
-    func();
-    debounceTimers.delete(key);
-  }, delay);
-  
-  debounceTimers.set(key, timer);
-};
-
-export function useChat(
-  characterId?: string | number,
-  personaId?: string,
-  personaAvatar?: string,
-  userId?: string,
-  heartsFunction?: any
-) {
+// === useChat 훅 ===
+export const useChat = (characterId?: number | string, personaId?: string) => {
+  const { user } = useAuth();
   const [state, setState] = useState<ChatState>({
     messages: [],
     loading: false,
     error: null,
     favor: 0,
+    favorChange: 0,
     backgroundImageUrl: undefined
   });
-  
+
   const isUnmountedRef = useRef(false);
-  
-  // === 컴포넌트 언마운트 처리 ===
+
+  // 컴포넌트 언마운트 감지
   useEffect(() => {
     return () => {
       isUnmountedRef.current = true;
-      // 진행 중인 모든 요청 취소
-      Array.from(debounceTimers.values()).forEach(timer => clearTimeout(timer));
-      debounceTimers.clear();
     };
   }, []);
-  
-  // === 🚀 초고속 캐릭터 로드 ===
-  const loadCharacter = useCallback(async (characterId: number): Promise<Character> => {
-    return ultraFetch(`/character/${characterId}`);
-  }, []);
-  
-  // === 🚀 초고속 메시지 로드 ===
-  const loadMessages = useCallback((characterId: number | string, personaId: string) => {
-    const debounceKey = `load_${characterId}_${personaId}`;
+
+  // === 메시지 로드 ===
+  const loadMessages = useCallback(async (characterId: number | string, personaId: string) => {
+    if (!personaId || isUnmountedRef.current) return;
     
-    ultraDebounce(async () => {
-      if (isUnmountedRef.current) return;
+    console.log('🔄 loadMessages 호출됨:', { characterId, personaId });
+    console.log('🧪 현재 상태:', { messages: state.messages.length, loading: state.loading });
+    
+    setState(prev => ({ ...prev, loading: true, error: null }));
+    
+    try {
+      const url = `/api/chat?personaId=${personaId}&characterId=${characterId}`;
+      console.log('🌐 요청 URL:', url);
       
-      setState(prev => ({ ...prev, loading: true, error: null }));
+      const response = await corsRequest(url, { method: 'GET' });
+      console.log('📡 HTTP 응답 상태:', response.status, response.ok);
       
-      try {
-        const data = await ultraFetch(`/chat/${characterId}?personaId=${personaId}`);
+      const data = await response.json();
+      console.log('📦 응답 데이터 원본:', data);
+      console.log('📊 메시지 배열 상세 확인:', {
+        hasData: !!data,
+        hasOkField: 'ok' in data,
+        okValue: data?.ok,
+        hasMessages: !!data?.messages,
+        messagesType: typeof data?.messages,
+        isArray: Array.isArray(data?.messages),
+        messageCount: data?.messages?.length,
+        firstThreeMessages: data?.messages?.slice(0, 3)
+      });
+      
+      if (!isUnmountedRef.current) {
+        console.log('🔍 조건 검사 상세:', {
+          hasData: !!data,
+          dataOk: data?.ok,
+          hasMessages: !!data?.messages,
+          isArray: Array.isArray(data?.messages),
+          finalCondition: data && data.messages && Array.isArray(data.messages),
+          isUnmounted: isUnmountedRef.current
+        });
         
-        if (!isUnmountedRef.current) {
-          setState(prev => ({
-            ...prev,
-            messages: data.messages || [],
-            favor: data.favor || 0,
-            backgroundImageUrl: data.backgroundImageUrl || data.character?.backgroundImg,
-            loading: false
-          }));
+        if (data && data.messages && Array.isArray(data.messages)) {
+          try {
+            console.log('✅ 메시지 처리 시작 - 개수:', data.messages.length);
+            console.log('🔍 첫 번째 메시지 상세:', data.messages[0]);
+            
+            const formattedMessages = data.messages.map((msg: any, index: number) => {
+              console.log(`📝 메시지 ${index + 1} 처리중:`, {
+                id: msg.id,
+                message: msg.message,
+                sender: msg.sender,
+                createdAt: msg.createdAt
+              });
+              return {
+                id: msg.id?.toString() || Date.now().toString() + index,
+                text: msg.message || msg.text || '',
+                message: msg.message || msg.text || '',
+                sender: msg.sender === 'assistant' ? 'ai' : msg.sender,
+                timestamp: msg.createdAt || msg.timestamp || new Date().toISOString(),
+                characterName: msg.characterName,
+                characterProfileImg: msg.characterProfileImg,
+                characterAge: msg.characterAge,
+                characterJob: msg.characterJob,
+                avatar: msg.avatar
+              };
+            });
+            
+            console.log('🎯 최종 처리된 메시지들:', formattedMessages);
+            console.log('🎯 처리된 메시지 개수:', formattedMessages.length);
+            
+            setState(prev => {
+              console.log('🔄 setState 호출 - 이전 상태:', prev.messages.length);
+              const newState = {
+                ...prev,
+                messages: formattedMessages,
+                favor: data.favor || 0,
+                favorChange: 0,
+                loading: false
+              };
+              console.log('🔄 setState 호출 - 새로운 상태:', newState.messages.length);
+              return newState;
+            });
+            
+            console.log('✅ setState 완료');
+            
+          } catch (mapError) {
+            console.error('💥 메시지 매핑 에러:', mapError);
+            setState(prev => ({ ...prev, messages: [], loading: false }));
+          }
+        } else {
+          console.log('❌ 메시지 데이터 없음 또는 잘못된 형식', {
+            data: !!data,
+            messages: !!data?.messages,
+            isArray: Array.isArray(data?.messages)
+          });
+          setState(prev => ({ ...prev, messages: [], loading: false }));
         }
-        
-        return data;
-        
-      } catch (error: any) {
-        if (!isUnmountedRef.current) {
-          setState(prev => ({
-            ...prev,
-            loading: false,
-            error: '메시지 로드 실패'
-          }));
-        }
-        throw error;
       }
-    }, DEBOUNCE_DELAY, debounceKey);
+    } catch (error) {
+      console.error('💥 loadMessages 에러:', error);
+      if (!isUnmountedRef.current) {
+        setState(prev => ({ 
+          ...prev, 
+          loading: false, 
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }));
+      }
+    }
   }, []);
-  
-  // === 🚀 초고속 메시지 전송 ===
-  const sendMessage = useCallback((message: string) => {
-    if (!characterId || !personaId) return;
+
+  // === 메시지 전송 ===
+  const sendMessage = useCallback(async (message: string) => {
+    const userIdToSend = user?.uid;
+    if (!userIdToSend) {
+      alert('로그인 후 이용해 주세요!');
+      return;
+    }
+    if (!characterId || !personaId || !message?.trim()) {
+      console.error('❌ sendMessage: 필수 파라미터 누락', { characterId, personaId, message });
+      return;
+    }
     
     const charId = String(characterId);
     const persId = String(personaId);
-    const debounceKey = `send_${charId}_${persId}`;
     
-    ultraDebounce(async () => {
+    if (isUnmountedRef.current) return;
+    
+    // 1️⃣ 사용자 메시지를 즉시 UI에 추가
+    const userMessage = {
+      id: Date.now().toString(),
+      text: message,
+      message: message,
+      sender: 'user' as const,
+      timestamp: new Date().toISOString(),
+      characterName: undefined,
+      characterProfileImg: undefined,
+      characterAge: undefined,
+      characterJob: undefined,
+      avatar: undefined
+    };
+    
+    console.log('👤 사용자 메시지 즉시 추가:', userMessage);
+    setState(prev => ({
+      ...prev,
+      messages: [...prev.messages, userMessage],
+      loading: true, // 로딩 시작
+      error: null
+    }));
+    
+    // 사용자 메시지 추가 후 스크롤
+    setTimeout(() => {
+      const messagesContainer = document.querySelector('.messages-container');
+      if (messagesContainer) {
+        messagesContainer.scrollTo({
+          top: messagesContainer.scrollHeight,
+          behavior: 'smooth'
+        });
+      }
+    }, 100);
+    
+    try {
+      console.log('📤 메시지 전송 요청:', { 
+        personaId: persId, 
+        characterId: parseInt(charId),
+        message: message,
+        sender: 'user',
+        userId: userIdToSend
+      });
+      
+      const response = await corsRequest(`/api/chat`, {
+        method: 'POST',
+        body: JSON.stringify({ 
+          personaId: persId, 
+          characterId: parseInt(charId),
+          message: message,
+          sender: 'user',
+          userId: userIdToSend
+        })
+      });
+      
+      const data = await response.json();
+      console.log('📨 메시지 전송 응답:', data);
+      
       if (isUnmountedRef.current) return;
       
-      setState(prev => ({ ...prev, loading: true, error: null }));
-      
-      try {
-        const data = await ultraFetch(`/chat/${charId}`, {
-          method: 'POST',
-          body: JSON.stringify({ personaId: persId, message })
-        }, 5000); // 메시지 전송은 5초 타임아웃
+      if (data && Array.isArray(data.messages)) {
+        // 2️⃣ 백엔드에서 받은 전체 메시지 목록으로 업데이트
+        console.log('🔄 전체 메시지 목록으로 업데이트');
+        const formattedMessages = data.messages.map((msg: any) => ({
+          id: msg.id?.toString() || Date.now().toString(),
+          text: msg.message || msg.text || '',
+          message: msg.message || msg.text || '',
+          sender: msg.sender === 'assistant' ? 'ai' : msg.sender,
+          timestamp: msg.createdAt || msg.timestamp || new Date().toISOString(),
+          characterName: msg.characterName,
+          characterProfileImg: msg.characterProfileImg,
+          characterAge: msg.characterAge,
+          characterJob: msg.characterJob,
+          avatar: msg.avatar
+        }));
         
-        if (!isUnmountedRef.current) {
-          setState(prev => ({
-            ...prev,
-            messages: data.messages || [],
-            favor: data.favor || prev.favor,
-            backgroundImageUrl: data.backgroundImageUrl || prev.backgroundImageUrl,
-            loading: false
-          }));
+        // 호감도 변화 체크 및 토스트 표시
+        const favorChange = data.favorChange || 0;
+        if (favorChange !== 0) {
+          const favorEvent = new CustomEvent('favorChange', {
+            detail: {
+              change: favorChange,
+              current: data.favor || 0,
+              previous: data.previousFavor || 0
+            }
+          });
+          window.dispatchEvent(favorEvent);
         }
         
-        // 관련 캐시 무효화
-        globalCache.forEach((value, key) => {
-          if (key.includes(`/chat/${charId}`) || key.includes('/chat/list')) {
-            globalCache.delete(key);
+        setState(prev => ({
+          ...prev,
+          messages: formattedMessages,
+          favor: data.favor || prev.favor,
+          favorChange: favorChange,
+          loading: false
+        }));
+        
+        // AI 응답 받은 후 스크롤
+        setTimeout(() => {
+          const messagesContainer = document.querySelector('.messages-container');
+          if (messagesContainer) {
+            messagesContainer.scrollTo({
+              top: messagesContainer.scrollHeight,
+              behavior: 'smooth'
+            });
           }
-        });
+        }, 100);
+      } else {
+        // 3️⃣ 메시지 리스트를 다시 로드
+        console.log('🔄 메시지 리스트 다시 로드');
+        await loadMessages(charId, persId);
+        setState(prev => ({ ...prev, loading: false }));
         
-        return data;
-        
-      } catch (error: any) {
-        if (!isUnmountedRef.current) {
-          setState(prev => ({
-            ...prev,
-            loading: false,
-            error: '메시지 전송 실패'
-          }));
-        }
-        throw error;
+        // 메시지 리로드 후 스크롤
+        setTimeout(() => {
+          const messagesContainer = document.querySelector('.messages-container');
+          if (messagesContainer) {
+            messagesContainer.scrollTo({
+              top: messagesContainer.scrollHeight,
+              behavior: 'smooth'
+            });
+          }
+        }, 100);
       }
-    }, DEBOUNCE_DELAY, debounceKey);
-  }, [characterId, personaId]);
-  
+    } catch (error) {
+      console.error('💥 sendMessage 에러:', error);
+      if (!isUnmountedRef.current) {
+        setState(prev => ({ 
+          ...prev, 
+          loading: false, 
+          error: error instanceof Error ? error.message : 'Unknown error'
+        }));
+      }
+    } finally {
+      // 모든 경우에 로딩 상태 종료
+      if (!isUnmountedRef.current) {
+        console.log('🏁 sendMessage 완료 - loading false 설정');
+        setState(prev => ({ ...prev, loading: false }));
+      }
+    }
+  }, [characterId, personaId, loadMessages, user?.uid]);
+
   // === 초기 데이터 로드 ===
   useEffect(() => {
-    const charIdStr = String(characterId || '');
-    const personaIdStr = String(personaId || '');
-    if (characterId && personaId && charIdStr.trim() && personaIdStr.trim()) {
+    console.log('🚀 useChat useEffect 실행:', { characterId, personaId });
+    
+    if (characterId && personaId && typeof personaId === 'string') {
+      console.log('✅ 조건 만족 - loadMessages 호출');
       loadMessages(characterId, personaId);
+    } else {
+      console.log('❌ 조건 불만족 - loadMessages 건너뜀', {
+        hasCharacterId: !!characterId,
+        hasPersonaId: !!personaId,
+        personaIdType: typeof personaId
+      });
     }
-  }, [characterId, personaId, loadMessages]);
-  
-  // === 🚀 초고속 채팅 목록 ===
-  const loadChatList = useCallback(async (userId: string): Promise<ChatListItem[]> => {
-    try {
-      const data = await ultraFetch(`/chat/list?userId=${userId}`);
-      return data || [];
-    } catch (error) {
-      console.error('채팅 목록 로드 실패:', error);
-      return [];
-    }
-  }, []);
-  
-  // === 🚀 초고속 첫 만남 날짜 ===
-  const getFirstMeetDate = useCallback(async (characterId: number | string, personaId: string): Promise<string> => {
-    try {
-      const data = await ultraFetch(`/chat/first-date?characterId=${characterId}&personaId=${personaId}`);
-      return data.firstDate || new Date().toISOString().split('T')[0];
-    } catch (error) {
-      return new Date().toISOString().split('T')[0];
-    }
-  }, []);
-  
-  // === 캐시 관리 ===
-  const clearCache = useCallback(() => {
-    globalCache.clear();
-    activeRequests.clear();
-  }, []);
-  
-  const getCacheStats = useCallback(() => {
-    return {
-      cacheSize: globalCache.size,
-      activeRequests: activeRequests.size,
-      debounceTimers: debounceTimers.size
-    };
-  }, []);
-  
+  }, [characterId, personaId]);
+
+  // === 반환값 ===
   return {
-    // State
     messages: state.messages,
     loading: state.loading,
     error: state.error,
     favor: state.favor,
+    favorChange: state.favorChange,
     backgroundImageUrl: state.backgroundImageUrl,
-    
-    // Actions
     sendMessage,
-    loadMessages,
-    loadCharacter,
-    loadChatList,
-    getFirstMeetDate,
-    
-    // Utils
-    clearCache,
-    getCacheStats
-  };
-}
-
-// === 🚀 자동 캐시 정리 (5분마다) ===
-if (typeof window !== 'undefined') {
-  setInterval(() => {
-    const now = Date.now();
-    let cleaned = 0;
-    
-    globalCache.forEach((value, key) => {
-      if (now - value.timestamp > CACHE_TTL * 10) { // 50초 후 정리
-        globalCache.delete(key);
-        cleaned++;
+    reloadMessages: () => {
+      if (characterId && personaId) {
+        loadMessages(characterId, personaId);
       }
-    });
-    
-    if (cleaned > 0) {
-      console.log(`🧹 Frontend cache cleaned: ${cleaned} items`);
-    }
-  }, 5 * 60 * 1000);
-}
+    },
+    loadMessages
+  };
+};
+
+

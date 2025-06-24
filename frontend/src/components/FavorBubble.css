@@ -1,0 +1,126 @@
+.favor-bubble {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  margin: 10px 0;
+  opacity: 1;
+  transform: translateY(0);
+  transition: all 0.3s ease-in-out;
+  z-index: 10;
+}
+
+.favor-bubble.hidden {
+  opacity: 0;
+  transform: translateY(-10px);
+}
+
+.favor-bubble-content {
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  position: relative;
+  text-align: center;
+  min-width: 120px;
+  animation: fadeInUp 0.5s ease-out;
+}
+
+.favor-bubble-content.positive {
+  background-color: #10B981;
+}
+
+.favor-bubble-content.negative {
+  background-color: #EF4444;
+}
+
+.favor-bubble.hidden .favor-bubble-content {
+  animation: fadeOut 0.3s ease-in;
+}
+
+.favor-bubble-arrow {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+}
+
+.favor-bubble-arrow.top {
+  top: -6px;
+}
+
+.favor-bubble-arrow.bottom {
+  bottom: -6px;
+}
+
+.favor-bubble-arrow.top.positive {
+  border-bottom: 6px solid #10B981;
+}
+
+.favor-bubble-arrow.top.negative {
+  border-bottom: 6px solid #EF4444;
+}
+
+.favor-bubble-arrow.bottom.positive {
+  border-top: 6px solid #10B981;
+}
+
+.favor-bubble-arrow.bottom.negative {
+  border-top: 6px solid #EF4444;
+}
+
+.favor-bubble-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.favor-emoji {
+  font-size: 16px;
+}
+
+.favor-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.favor-change {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.favor-stage {
+  font-size: 11px;
+  opacity: 0.8;
+  background-color: rgba(255, 255, 255, 0.2);
+  padding: 2px 6px;
+  border-radius: 8px;
+  margin-top: 2px;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+} 

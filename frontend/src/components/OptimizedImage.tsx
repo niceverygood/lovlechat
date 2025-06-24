@@ -1,4 +1,5 @@
 import React, { useState, useCallback, memo } from 'react';
+import { DEFAULT_PROFILE_IMAGE } from '../utils/constants';
 
 interface OptimizedImageProps {
   src: string;
@@ -23,7 +24,7 @@ const OptimizedImage = memo(({
   height,
   className,
   style,
-  fallbackSrc = "/imgdefault.jpg",
+  fallbackSrc = DEFAULT_PROFILE_IMAGE,
   onClick,
   onLoad,
   onError

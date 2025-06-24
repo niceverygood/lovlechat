@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import CustomAlert from './CustomAlert';
+import { DEFAULT_PROFILE_IMAGE, handleProfileImageError } from '../utils/constants';
 
 interface ProfileEditModalProps {
   isOpen: boolean;
@@ -49,7 +50,7 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
         job: profileData.job || '',
         info: profileData.info || '',
         habit: profileData.habit || '',
-        avatar: profileData.avatar || '/imgdefault.jpg'
+        avatar: profileData.avatar || DEFAULT_PROFILE_IMAGE
       });
     }
   }, [isOpen]);
@@ -162,15 +163,10 @@ const ProfileEditModal: React.FC<ProfileEditModalProps> = ({
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
             <div style={{ position: 'relative', marginBottom: 24 }}>
               <img
-                src={formData.avatar || '/imgdefault.jpg'}
+                src={formData.avatar || DEFAULT_PROFILE_IMAGE}
                 alt="프로필"
                 style={{ width: 100, height: 100, borderRadius: '50%', objectFit: 'cover', border: '3px solid #fff', background: '#eee' }}
-                onError={e => {
-                  if (!e.currentTarget.src.endsWith('/imgdefault.jpg')) {
-                    e.currentTarget.onerror = null;
-                    e.currentTarget.src = '/imgdefault.jpg';
-                  }
-                }}
+                onError={handleProfileImageError}
               />
               <button
                 onClick={handleProfileImgClick}
