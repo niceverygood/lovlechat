@@ -77,29 +77,29 @@ server {
     
     # 기본 설정
     client_max_body_size 10M;
-
+    
     # Gzip 압축 (대역폭 절약)
     gzip on;
     gzip_vary on;
     gzip_min_length 1024;
     gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
-    
-    # 프론트엔드 (React)
-    location / {
-        proxy_pass http://127.0.0.1:3001;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-    
-    # 백엔드 API (Next.js)
+        
+        # 프론트엔드 (React)
+        location / {
+            proxy_pass http://127.0.0.1:3001;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+        
+        # 백엔드 API (Next.js)
     location /api/ {
         proxy_pass http://127.0.0.1:3002/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 NGINX_EOF
@@ -126,6 +126,11 @@ NGINX_EOF
     
     echo "✅ 프리 티어 환경 설정 완료"
 EOF
+
+if [ $? -ne 0 ]; then
+    echo -e "${RED}❌ 프리 티어 환경 설정 실패${NC}"
+    exit 1
+fi
 
 # 3. 애플리케이션 배포
 echo -e "${YELLOW}📂 애플리케이션 배포 중...${NC}"
@@ -156,6 +161,11 @@ ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << EOF
     
     echo "✅ 애플리케이션 빌드 완료"
 EOF
+
+if [ $? -ne 0 ]; then
+    echo -e "${RED}❌ 애플리케이션 배포 실패${NC}"
+    exit 1
+fi
 
 # 4. 환경변수 설정
 echo -e "${YELLOW}🔧 환경변수 설정 중...${NC}"
@@ -208,18 +218,36 @@ ENV_EOF
     echo "⚠️  OpenAI, 아임포트, Firebase 키는 수동으로 설정하세요"
 EOF
 
-# 5. PM2로 애플리케이션 시작
-echo -e "${YELLOW}🚀 애플리케이션 시작 중...${NC}"
-ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << EOF
-    cd $APP_DIR
-    
-    # PM2로 애플리케이션 시작
-    pm2 start ecosystem.config.js --env production
+if [ $? -eq 0 ]; then
+    echo -e "${GREEN}✅ 환경변수 설정 완료${NC}"
+else
+    echo -e "${RED}❌ 환경변수 설정 실패${NC}"
+    exit 1
+fi
+
+# 5. PM2로 애플리케이션 시작 및 재실행
+echo "🚀 애플리케이션 시작 중..."
+ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << 'EOF'
+  set -e
+  # 기존 프로세스 삭제
+  pm2 delete all || true
+  
+  # 백엔드 시작
+  pm2 start npm --name "lovlechat-backend" -- run start --cwd "/home/ubuntu/lovlechat/backend" -- --port 3002
+
+  # 프론트엔드 시작
+  pm2 start serve --name "lovlechat-frontend" -- -s build -l 3001 --cwd "/home/ubuntu/lovlechat/frontend"
+  
+  # 프로세스 목록 저장
     pm2 save
-    pm2 startup
-    
-    echo "✅ 애플리케이션 시작 완료"
 EOF
+    
+if [ $? -eq 0 ]; then
+    echo "✅ 애플리케이션 시작 완료"
+else
+    echo -e "${RED}❌ 애플리케이션 시작 실패${NC}"
+    exit 1
+fi
 
 # 6. 방화벽 설정
 echo -e "${YELLOW}🔒 방화벽 설정 중...${NC}"
@@ -234,6 +262,11 @@ ssh -i "$KEY_PATH" "$DEPLOY_USER@$EC2_IP" << 'EOF'
     
     echo "✅ 방화벽 설정 완료"
 EOF
+
+if [ $? -ne 0 ]; then
+    echo -e "${RED}❌ 방화벽 설정 실패${NC}"
+    exit 1
+fi
 
 # 7. 상태 확인
 echo -e "${YELLOW}📊 배포 상태 확인 중...${NC}"

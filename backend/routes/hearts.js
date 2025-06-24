@@ -27,6 +27,13 @@ router.get('/', async (req, res) => {
     );
 
     const hearts = results.length > 0 ? results[0].afterHearts : 100; // 신규 사용자는 100 하트로 시작
+    
+    // 캐싱 헤더 추가 (10초 캐시)
+    res.set({
+      'Cache-Control': 'public, max-age=10',
+      'ETag': `"hearts-${userId}-${hearts}"`
+    });
+    
     res.json({ ok: true, hearts });
   } catch (error) {
     console.error('Hearts 조회 에러:', error);

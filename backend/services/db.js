@@ -8,13 +8,17 @@ const DB_CONFIG = {
   password: process.env.DB_PASSWORD || '1234',
   database: process.env.DB_NAME || 'lovlechat',
   charset: 'utf8mb4',
-  connectionLimit: 10,
+  connectionLimit: 20,
   waitForConnections: true,
   queueLimit: 0,
-  acquireTimeout: 60000,
-  timeout: 60000,
+  acquireTimeout: 10000,
+  timeout: 10000,
   reconnect: true,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  // 성능 최적화 설정
+  multipleStatements: false,
+  keepAliveInitialDelay: 0,
+  enableKeepAlive: true
 };
 
 let pool = null;
