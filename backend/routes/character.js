@@ -160,8 +160,8 @@ router.get('/user/:userId', async (req, res) => {
          FROM character_profiles 
          WHERE userId = ? 
          ORDER BY createdAt DESC 
-         LIMIT ? OFFSET ?`,
-        [userId, limit, offset]
+         LIMIT ${limit} OFFSET ${offset}`,
+        [userId]
       )
     ]);
 
