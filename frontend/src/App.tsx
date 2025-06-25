@@ -1,148 +1,262 @@
 // src/App.tsx
-import React, { useEffect, useRef } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import React, { Suspense, lazy } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
-import LoginPage from './pages/LoginPage';
-import IntroPage from './pages/IntroPage';
-import HomePage from './pages/HomePage';
-import ChatPage from './pages/ChatPage';
 import ProtectedRoute from './components/ProtectedRoute';
-import CharacterCreatePage from './pages/CharacterCreatePage';
-import ForYouPage from './pages/ForYouPage';
-import MyPage from './pages/MyPage';
-import CharacterDetailPage from './pages/CharacterDetailPage';
-import HeartShopPage from './pages/HeartShopPage';
-import MonitoringDashboard from './pages/MonitoringDashboard';
-import { setGuestMode, clearGuestMode } from './utils/guestMode';
+import './App.css';
 
-function AppContent() {
-  const { user, loading } = useAuth();
-  const navigate = useNavigate();
-  const wasLoggedIn = useRef(false);
+// Lazy load components for code splitting
+const IntroPage = lazy(() => import('./pages/IntroPage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const HomePage = lazy(() => import('./pages/HomePage'));
+const ForYouPage = lazy(() => import('./pages/ForYouPage'));
+const MyPage = lazy(() => import('./pages/MyPage'));
+const MyPageOptimized = lazy(() => import('./pages/MyPageOptimized'));
+const HeartShopPage = lazy(() => import('./pages/HeartShopPage'));
+const CharacterDetailPage = lazy(() => import('./pages/CharacterDetailPage'));
+const CharacterCreatePage = lazy(() => import('./pages/CharacterCreatePage'));
+const ProfileDetailPage = lazy(() => import('./pages/ProfileDetailPage'));
+const ChatPage = lazy(() => import('./pages/ChatPage'));
+const MonitoringDashboard = lazy(() => import('./pages/MonitoringDashboard'));
 
-  // 로그인/로그아웃 상태 감지 및 게스트 모드 처리
-  useEffect(() => {
-    if (loading) return;
+// Loading component
+const PageLoading = () => (
+  <div style={{
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: '100vh',
+    background: 'var(--color-bg)',
+    color: '#fff',
+    fontSize: '18px',
+    fontWeight: 600
+  }}>
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      gap: '16px'
+    }}>
+      <div style={{
+        width: '40px',
+        height: '40px',
+        border: '3px solid #333',
+        borderTop: '3px solid #ff4081',
+        borderRadius: '50%',
+        animation: 'spin 1s linear infinite'
+      }} />
+      <div>로딩 중...</div>
+    </div>
+  </div>
+);
 
-    if (user) {
-      // 로그인 상태
-      console.log('로그인 상태 - 게스트 모드 해제');
-      clearGuestMode();
-      wasLoggedIn.current = true;
-    } else {
-      // 로그아웃 상태
-      if (wasLoggedIn.current) {
-        // 이전에 로그인되어 있었다면 (로그아웃된 상황)
-        console.log('로그아웃 감지 - 게스트 모드로 전환');
-        setGuestMode();
-        navigate('/home', { replace: true });
-        wasLoggedIn.current = false;
-      } else {
-        // 처음 방문하거나 게스트 상태
-        const currentMode = localStorage.getItem('userMode');
-        if (!currentMode || currentMode !== 'guest') {
-          console.log('자동으로 게스트 모드 설정');
-          setGuestMode();
-        }
-      }
-    }
-  }, [user, loading, navigate]);
-
-  if (loading) {
-    return <div>로딩 중…</div>;
+// Error Boundary for lazy components
+class LazyErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
   }
 
-  // 게스트 모드 확인
-  const isGuestMode = localStorage.getItem('userMode') === 'guest';
-  
-  // 디버깅 로그
-  console.log('App.js 상태:', {
-    user: !!user,
-    isGuestMode,
-    userMode: localStorage.getItem('userMode')
-  });
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    console.error('Lazy loading error:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          minHeight: '100vh',
+          background: 'var(--color-bg)',
+          color: '#ff4081',
+          fontSize: '18px',
+          fontWeight: 600,
+          flexDirection: 'column',
+          gap: '16px'
+        }}>
+          <div>페이지 로딩 중 오류가 발생했습니다.</div>
+          <button 
+            onClick={() => window.location.reload()}
+            style={{
+              background: '#ff4081',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '12px',
+              padding: '12px 24px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            새로고침
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// Wrapper component for lazy loaded pages
+const LazyPageWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <LazyErrorBoundary>
+    <Suspense fallback={<PageLoading />}>
+      {children}
+    </Suspense>
+  </LazyErrorBoundary>
+);
+
+function App() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <PageLoading />;
+  }
 
   return (
-    <Routes>
-      {/* 메인 페이지 - 바로 홈으로 이동 */}
-      <Route
-        path="/"
-        element={<Navigate to="/home" replace />}
-      />
-      
-      {/* 로그인 페이지 */}
-      <Route
-        path="/login"
-        element={!user ? <LoginPage /> : <Navigate to="/home" replace />}
-      />
-      
-      <Route
-        path="/intro"
-        element={user ? <IntroPage /> : <Navigate to="/" replace />}
-      />
-      
-      {/* 홈 페이지 - 게스트도 접근 가능 */}
-      <Route
-        path="/home"
-        element={user || isGuestMode ? <HomePage /> : <Navigate to="/" replace />}
-      />
-      
-      {/* 채팅 - 게스트도 접근 가능 (제한 적용) */}
-      <Route 
-        path="/chat/:id" 
-        element={user || isGuestMode ? <ChatPage /> : <Navigate to="/" replace />} 
-      />
-      
-      <Route path="/character-create" element={<CharacterCreatePage />} />
-      
-      {/* For You 페이지 - 게스트도 접근 가능 (제한 적용) */}
-      <Route
-        path="/for-you"
-        element={user || isGuestMode ? <ForYouPage /> : <Navigate to="/" replace />}
-      />
-      
-      {/* 마이페이지 - 로그인 필수 */}
-      <Route
-        path="/my"
-        element={
-          <ProtectedRoute>
-            <MyPage />
-          </ProtectedRoute>
-        }
-      />
-      
-      <Route 
-        path="/character/:id" 
-        element={user || isGuestMode ? <CharacterDetailPage /> : <Navigate to="/" replace />} 
-      />
-      
-      {/* 하트샵 - 로그인 필수 */}
-      <Route 
-        path="/heart-shop" 
-        element={
-          <ProtectedRoute>
-            <HeartShopPage />
-          </ProtectedRoute>
-        }
-      />
+    <Router>
+      <div className="App">
+        <Routes>
+          {/* Public Routes */}
+          <Route 
+            path="/intro" 
+            element={
+              <LazyPageWrapper>
+                <IntroPage />
+              </LazyPageWrapper>
+            } 
+          />
+          <Route 
+            path="/login" 
+            element={
+              <LazyPageWrapper>
+                <LoginPage />
+              </LazyPageWrapper>
+            } 
+          />
 
-      {/* 모니터링 대시보드 - 개발환경에서만 접근 가능 */}
-      {(process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') && (
-        <Route 
-          path="/monitoring" 
-          element={<MonitoringDashboard />}
-        />
-      )}
-      
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+          {/* Protected Routes */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <LazyPageWrapper>
+                  <HomePage />
+                </LazyPageWrapper>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/for-you"
+            element={
+              <ProtectedRoute>
+                <LazyPageWrapper>
+                  <ForYouPage />
+                </LazyPageWrapper>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/my"
+            element={
+              <ProtectedRoute>
+                <LazyPageWrapper>
+                  <MyPageOptimized />
+                </LazyPageWrapper>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/my-original"
+            element={
+              <ProtectedRoute>
+                <LazyPageWrapper>
+                  <MyPage />
+                </LazyPageWrapper>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/heart-shop"
+            element={
+              <ProtectedRoute>
+                <LazyPageWrapper>
+                  <HeartShopPage />
+                </LazyPageWrapper>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/character/:id"
+            element={
+              <ProtectedRoute>
+                <LazyPageWrapper>
+                  <CharacterDetailPage />
+                </LazyPageWrapper>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/character-create"
+            element={
+              <ProtectedRoute>
+                <LazyPageWrapper>
+                  <CharacterCreatePage />
+                </LazyPageWrapper>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile/:id"
+            element={
+              <ProtectedRoute>
+                <LazyPageWrapper>
+                  <ProfileDetailPage />
+                </LazyPageWrapper>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/chat/:personaId/:characterId"
+            element={
+              <ProtectedRoute>
+                <LazyPageWrapper>
+                  <ChatPage />
+                </LazyPageWrapper>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/monitoring"
+            element={
+              <ProtectedRoute>
+                <LazyPageWrapper>
+                  <MonitoringDashboard />
+                </LazyPageWrapper>
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Redirect root to intro for non-authenticated users */}
+          <Route
+            path="*"
+            element={
+              user ? <Navigate to="/" replace /> : <Navigate to="/intro" replace />
+            }
+          />
+        </Routes>
+      </div>
+    </Router>
   );
 }
 
-export default function App() {
-  return (
-    <BrowserRouter>
-      <AppContent />
-    </BrowserRouter>
-  );
-}
+export default App;

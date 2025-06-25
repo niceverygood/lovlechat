@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { apiGet, apiPost } from '../lib/api';
+import { apiGet, apiPost, createApiTimer } from '../lib/api';
 
 interface HeartData {
   hearts: number;
@@ -84,27 +84,35 @@ function setCachedHearts(userId: string, data: HeartData): void {
   console.log(`💾 하트 캐시 저장:`, data.hearts);
 }
 
-// 실제 하트 API 호출
+// 실제 하트 API 호출 (응답시간 측정 추가)
 async function fetchHearts(userId: string): Promise<HeartData> {
-  console.log(`🔄 하트 API 호출 시작: ${userId}`);
+  const timer = createApiTimer('하트 조회');
   
-  const data = await apiGet(`/api/hearts?userId=${userId}`);
-  
-  if (!data.ok) {
-    throw new Error(data.error || '하트 조회 실패');
+  try {
+    const data = await timer.measure(async () => {
+      console.log(`🔄 하트 API 호출 시작: ${userId}`);
+      return await apiGet(`/api/hearts?userId=${userId}`);
+    });
+    
+    if (!data.ok) {
+      throw new Error(data.error || '하트 조회 실패');
+    }
+    
+    const heartData: HeartData = {
+      hearts: data.hearts || 0,
+      lastUpdate: data.lastUpdate || new Date().toISOString()
+    };
+    
+    console.log(`✅ 하트 API 응답:`, heartData.hearts);
+    
+    // 캐시에 저장
+    setCachedHearts(userId, heartData);
+    
+    return heartData;
+  } catch (error) {
+    console.error('하트 조회 API 실패:', error);
+    throw error;
   }
-  
-  const heartData: HeartData = {
-    hearts: data.hearts || 0,
-    lastUpdate: data.lastUpdate || new Date().toISOString()
-  };
-  
-  console.log(`✅ 하트 API 응답:`, heartData.hearts);
-  
-  // 캐시에 저장
-  setCachedHearts(userId, heartData);
-  
-  return heartData;
 }
 
 export function useHearts(userId: string | null): UseHeartsReturn {
@@ -136,7 +144,7 @@ export function useHearts(userId: string | null): UseHeartsReturn {
     return true;
   }, []);
 
-  // 하트 조회 함수 (강력한 캐싱 및 중복 방지)
+  // 하트 조회 함수 (강력한 캐싱 및 중복 방지 + 응답시간 측정)
   const fetchHeartsData = useCallback(async (userId: string): Promise<void> => {
     // 캐시 확인
     const cached = getCachedHearts(userId);
@@ -168,6 +176,9 @@ export function useHearts(userId: string | null): UseHeartsReturn {
     setLoading(true);
     setError(null);
     
+    const timer = createApiTimer(`하트 조회 (userId: ${userId})`);
+    timer.start();
+    
     const promise = fetchHearts(userId);
     pendingRequests.set(pendingKey, promise);
     lastCallTime.set(userId, Date.now());
@@ -179,11 +190,13 @@ export function useHearts(userId: string | null): UseHeartsReturn {
       if (mountedComponents.has(componentId.current)) {
         setHearts(data.hearts);
         setError(null);
+        timer.end(data);
       }
     } catch (err) {
       console.error('하트 조회 실패:', err);
       if (mountedComponents.has(componentId.current)) {
         setError(err instanceof Error ? err.message : '하트 조회 실패');
+        timer.end(null, err);
       }
     } finally {
       pendingRequests.delete(pendingKey);
@@ -202,7 +215,7 @@ export function useHearts(userId: string | null): UseHeartsReturn {
     await fetchHeartsData(userId);
   }, [userId, fetchHeartsData]);
 
-  // 하트 사용
+  // 하트 사용 (응답시간 측정 추가)
   const useHearts = useCallback(async (
     amount: number, 
     description?: string, 
@@ -220,12 +233,17 @@ export function useHearts(userId: string | null): UseHeartsReturn {
     if (amount < 0) {
       console.log(`[하트 차감] userId: ${userId}, amount: ${amount}, before: ${hearts}`);
     }
+    
+    const timer = createApiTimer(`하트 사용 (${amount}개)`);
+    
     try {
-      const data = await apiPost('/api/hearts', {
-        userId,
-        amount: -Math.abs(amount), // 음수로 변환
-        description: description || `하트 사용 (${amount}개)`,
-        relatedId
+      const data = await timer.measure(async () => {
+        return await apiPost('/api/hearts', {
+          userId,
+          amount: -Math.abs(amount), // 음수로 변환
+          description: description || `하트 사용 (${amount}개)`,
+          relatedId
+        });
       });
 
       if (!data.ok) {

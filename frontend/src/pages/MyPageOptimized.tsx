@@ -11,6 +11,7 @@ import { useHearts } from "../hooks/useHearts";
 import { useBasicProfile } from "../hooks/useBasicProfile";
 import { usePersonas } from "../hooks/usePersonas";
 import { useCharactersInfinite } from "../hooks/useCharactersInfinite";
+import { createApiTimer, getPerformanceStats, resetPerformanceStats } from "../lib/api";
 import CustomAlert from '../components/CustomAlert';
 import OptimizedImage from '../components/OptimizedImage';
 import { DEFAULT_PROFILE_IMAGE } from '../utils/constants';
@@ -63,6 +64,72 @@ const HeartButton = memo(({ count, onClick }: { count: number; onClick: () => vo
   </button>
 ));
 
+// 성능 통계 컴포넌트
+const PerformanceStats = memo(() => {
+  const [stats, setStats] = useState(getPerformanceStats());
+  const [showStats, setShowStats] = useState(false);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStats(getPerformanceStats());
+    }, 1000); // 1초마다 업데이트
+
+    return () => clearInterval(interval);
+  }, []);
+
+  if (process.env.NODE_ENV !== 'development' && !showStats) return null;
+
+  return (
+    <div style={{ 
+      position: 'fixed',
+      bottom: 100,
+      right: 20,
+      background: 'rgba(0,0,0,0.8)',
+      color: '#fff',
+      padding: 12,
+      borderRadius: 8,
+      fontSize: 12,
+      zIndex: 1000,
+      maxWidth: 200
+    }}>
+      <div style={{ fontWeight: 700, marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
+        <span>📊 API 성능</span>
+        <button
+          onClick={() => setShowStats(!showStats)}
+          style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}
+        >
+          {showStats ? '−' : '+'}
+        </button>
+      </div>
+      {showStats && (
+        <>
+          <div>총 요청: {stats.totalRequests}회</div>
+          <div>평균 응답: {stats.avgDuration}ms</div>
+          <div>성공률: {stats.totalRequests > 0 ? Math.round((stats.successCount / stats.totalRequests) * 100) : 0}%</div>
+          <div>가장 빠름: {stats.fastestRequest.duration === Infinity ? '-' : `${stats.fastestRequest.duration}ms`}</div>
+          <div>가장 느림: {stats.slowestRequest.duration}ms</div>
+          <button
+            onClick={resetPerformanceStats}
+            style={{
+              background: '#ff4081',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 4,
+              padding: '4px 8px',
+              fontSize: 10,
+              cursor: 'pointer',
+              marginTop: 8,
+              width: '100%'
+            }}
+          >
+            리셋
+          </button>
+        </>
+      )}
+    </div>
+  );
+});
+
 // 무한 스크롤 IntersectionObserver 훅
 const useInfiniteScroll = (callback: () => void, hasMore: boolean, loading: boolean) => {
   const observerRef = useRef<HTMLDivElement>(null);
@@ -109,10 +176,17 @@ const PersonasSection = memo(({ userId }: { userId: string }) => {
   const [alertMsg, setAlertMsg] = useState('');
   const [alertTitle, setAlertTitle] = useState('');
 
-  // Lazy loading - 펼쳤을 때만 로드
+  // Lazy loading - 펼쳤을 때만 로드 (응답시간 측정 추가)
   useEffect(() => {
     if (isExpanded && !hasLoaded && !loading) {
-      loadPersonas();
+      const timer = createApiTimer('페르소나 목록 로딩');
+      timer.start();
+      
+      loadPersonas().then(() => {
+        timer.end('페르소나 목록 로딩 완료');
+      }).catch((error) => {
+        timer.end(null, error);
+      });
     }
   }, [isExpanded, hasLoaded, loading, loadPersonas]);
 
@@ -126,8 +200,12 @@ const PersonasSection = memo(({ userId }: { userId: string }) => {
   };
 
   const handleSave = async (updatedPersona: Persona) => {
+    const timer = createApiTimer('페르소나 수정');
     try {
-      await updatePersona(updatedPersona.id, updatedPersona);
+      await timer.measure(async () => {
+        return await updatePersona(updatedPersona.id, updatedPersona);
+      });
+      
       setShowEditModal(false);
       setAlertTitle('성공');
       setAlertMsg('프로필이 성공적으로 수정되었습니다.');
@@ -140,8 +218,12 @@ const PersonasSection = memo(({ userId }: { userId: string }) => {
   };
 
   const handleCreate = async (newPersona: Persona) => {
+    const timer = createApiTimer('페르소나 생성');
     try {
-      await createPersona(newPersona);
+      await timer.measure(async () => {
+        return await createPersona(newPersona);
+      });
+      
       setShowCreateModal(false);
       setAlertTitle('성공');
       setAlertMsg('프로필이 성공적으로 생성되었습니다.');
@@ -155,8 +237,12 @@ const PersonasSection = memo(({ userId }: { userId: string }) => {
 
   const handleDelete = async (personaId: string) => {
     if (window.confirm("정말로 삭제하시겠습니까?")) {
+      const timer = createApiTimer('페르소나 삭제');
       try {
-        await deletePersona(personaId);
+        await timer.measure(async () => {
+          return await deletePersona(personaId);
+        });
+        
         setAlertTitle('성공');
         setAlertMsg('프로필이 삭제되었습니다.');
         setAlertOpen(true);
@@ -369,10 +455,17 @@ const CharactersSection = memo(({ userId }: { userId: string }) => {
   // 무한 스크롤 설정
   const observerRef = useInfiniteScroll(loadMore, hasMore, isLoadingMore);
 
-  // Lazy loading - 펼쳤을 때만 로드
+  // Lazy loading - 펼쳤을 때만 로드 (응답시간 측정 추가)
   useEffect(() => {
     if (isExpanded && !hasLoaded && !loading) {
-      loadCharacters();
+      const timer = createApiTimer('캐릭터 목록 초기 로딩');
+      timer.start();
+      
+      loadCharacters().then(() => {
+        timer.end('캐릭터 목록 로딩 완료');
+      }).catch((error) => {
+        timer.end(null, error);
+      });
     }
   }, [isExpanded, hasLoaded, loading, loadCharacters]);
 
@@ -382,8 +475,12 @@ const CharactersSection = memo(({ userId }: { userId: string }) => {
 
   const handleDelete = async (characterId: number) => {
     if (window.confirm("정말로 삭제하시겠습니까?")) {
+      const timer = createApiTimer('캐릭터 삭제');
       try {
-        await deleteCharacter(characterId);
+        await timer.measure(async () => {
+          return await deleteCharacter(characterId);
+        });
+        
         setAlertTitle('성공');
         setAlertMsg('캐릭터가 삭제되었습니다.');
         setAlertOpen(true);
@@ -499,7 +596,7 @@ const CharactersSection = memo(({ userId }: { userId: string }) => {
                       color: '#888', 
                       fontSize: 14 
                     }}>
-                      더 불러오는 중...
+                      더 많은 캐릭터 로딩 중...
                     </div>
                   )}
                 </div>
@@ -509,14 +606,46 @@ const CharactersSection = memo(({ userId }: { userId: string }) => {
         </>
       )}
 
-      {/* 캐릭터 수정 모달 */}
+      {/* 캐릭터 수정 모달 - 추후 구현 */}
       {showEditModal && selectedCharacter && (
-        <CharacterEditModal
-          isOpen={showEditModal}
-          onClose={() => setShowEditModal(false)}
-          characterData={selectedCharacter}
-          onSave={() => setShowEditModal(false)}
-        />
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2000
+        }}>
+          <div style={{
+            background: 'var(--color-card)',
+            borderRadius: 20,
+            padding: 32,
+            width: '90%',
+            maxWidth: 400,
+            textAlign: 'center'
+          }}>
+            <div style={{ color: '#fff', marginBottom: 16 }}>
+              캐릭터 수정 기능은 곧 추가됩니다.
+            </div>
+            <button
+              onClick={() => setShowEditModal(false)}
+              style={{
+                background: '#ff4081',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 12,
+                padding: '12px 24px',
+                cursor: 'pointer'
+              }}
+            >
+              닫기
+            </button>
+          </div>
+        </div>
       )}
 
       <CustomAlert
@@ -547,6 +676,16 @@ export default function MyPageOptimized() {
 
   const userId = user?.uid || "";
 
+  // 페이지 로딩 성능 측정
+  useEffect(() => {
+    const timer = createApiTimer('마이페이지 전체 로딩');
+    timer.start();
+    
+    if (!authLoading && !profileLoading) {
+      timer.end(profile ? '마이페이지 로딩 성공' : '마이페이지 로딩 완료');
+    }
+  }, [authLoading, profileLoading, profile]);
+
   // 메모이제이션된 콜백들
   const handleHeartClick = useCallback(() => {
     navigate('/heart-shop');
@@ -563,9 +702,12 @@ export default function MyPageOptimized() {
 
   // 로그아웃 처리
   const handleLogout = async () => {
+    const timer = createApiTimer('로그아웃');
     try {
-      await signOutUser();
-      navigate('/login');
+      await timer.measure(async () => {
+        await signOutUser();
+        navigate('/login');
+      });
     } catch (error) {
       console.error('로그아웃 오류:', error);
     }
@@ -655,6 +797,9 @@ export default function MyPageOptimized() {
 
   return (
     <div style={{ background: "var(--color-bg)", minHeight: "100vh", paddingBottom: 80 }}>
+      {/* 성능 통계 표시 (개발 환경에서만) */}
+      <PerformanceStats />
+
       {/* 상단 기본 프로필 카드 */}
       <div style={{
         background: "var(--color-card)",
@@ -723,10 +868,10 @@ export default function MyPageOptimized() {
         </div>
       </div>
 
-      {/* 페르소나 섹션 (Lazy Loading) */}
+      {/* 페르소나 섹션 (Lazy Loading + 응답시간 측정) */}
       <PersonasSection userId={userId} />
 
-      {/* 캐릭터 섹션 (Infinite Scroll) */}
+      {/* 캐릭터 섹션 (Infinite Scroll + 응답시간 측정) */}
       <CharactersSection userId={userId} />
 
       <BottomNav />

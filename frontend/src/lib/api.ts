@@ -42,11 +42,175 @@ const getApiBaseUrl = (): string => {
 
 export const API_BASE_URL = getApiBaseUrl();
 
-// 기존 코드와의 호환성을 위해 임시로 export
-// TODO: 모든 파일을 axios로 마이그레이션 후 제거
+// API 응답시간 측정을 위한 인터페이스
+interface ApiRequestMetrics {
+  requestId: string;
+  method: string;
+  url: string;
+  startTime: number;
+  endTime?: number;
+  duration?: number;
+  status?: number;
+  size?: string;
+  compression?: string;
+  error?: any;
+}
 
 // 요청 시간 추적을 위한 Map
-const requestTimes = new Map<string, number>();
+const requestTimes = new Map<string, ApiRequestMetrics>();
+
+// 성능 통계 수집
+const performanceStats = {
+  totalRequests: 0,
+  totalDuration: 0,
+  avgDuration: 0,
+  slowestRequest: { url: '', duration: 0 },
+  fastestRequest: { url: '', duration: Infinity },
+  errorCount: 0,
+  successCount: 0
+};
+
+// 응답시간 임계값 (ms)
+const RESPONSE_TIME_THRESHOLDS = {
+  FAST: 200,      // 빠름
+  NORMAL: 1000,   // 보통
+  SLOW: 3000,     // 느림
+  VERY_SLOW: 5000 // 매우 느림
+};
+
+// 응답시간에 따른 이모지 선택
+const getSpeedEmoji = (duration: number): string => {
+  if (duration <= RESPONSE_TIME_THRESHOLDS.FAST) return '🚀';
+  if (duration <= RESPONSE_TIME_THRESHOLDS.NORMAL) return '✅';
+  if (duration <= RESPONSE_TIME_THRESHOLDS.SLOW) return '⚠️';
+  if (duration <= RESPONSE_TIME_THRESHOLDS.VERY_SLOW) return '🐌';
+  return '🚨';
+};
+
+// 응답시간 분류
+const getSpeedCategory = (duration: number): string => {
+  if (duration <= RESPONSE_TIME_THRESHOLDS.FAST) return 'FAST';
+  if (duration <= RESPONSE_TIME_THRESHOLDS.NORMAL) return 'NORMAL';
+  if (duration <= RESPONSE_TIME_THRESHOLDS.SLOW) return 'SLOW';
+  if (duration <= RESPONSE_TIME_THRESHOLDS.VERY_SLOW) return 'VERY_SLOW';
+  return 'TIMEOUT';
+};
+
+// useEffect용 API 응답시간 측정 헬퍼
+export const createApiTimer = (apiName: string) => {
+  let startTime: number;
+  
+  return {
+    start: () => {
+      startTime = performance.now();
+      console.log(`⏱️  [${apiName}] API 요청 시작 - ${new Date().toISOString()}`);
+    },
+    
+    end: (response?: any, error?: any) => {
+      const endTime = performance.now();
+      const duration = Math.round(endTime - startTime);
+      const emoji = getSpeedEmoji(duration);
+      const category = getSpeedCategory(duration);
+      
+      if (error) {
+        console.log(`❌ [${apiName}] API 에러 - ${duration}ms (${category})`, {
+          duration,
+          category,
+          error: error.message || error,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        console.log(`${emoji} [${apiName}] API 응답완료 - ${duration}ms (${category})`, {
+          duration,
+          category,
+          response: response ? 'Success' : 'No data',
+          timestamp: new Date().toISOString()
+        });
+      }
+      
+      return duration;
+    },
+    
+    measure: async <T>(apiCall: () => Promise<T>): Promise<T> => {
+      const startTime = performance.now();
+      console.log(`⏱️  [${apiName}] API 요청 시작 - ${new Date().toISOString()}`);
+      
+      try {
+        const result = await apiCall();
+        const endTime = performance.now();
+        const duration = Math.round(endTime - startTime);
+        const emoji = getSpeedEmoji(duration);
+        const category = getSpeedCategory(duration);
+        
+        console.log(`${emoji} [${apiName}] API 응답완료 - ${duration}ms (${category})`, {
+          duration,
+          category,
+          timestamp: new Date().toISOString()
+        });
+        
+        return result;
+      } catch (error) {
+        const endTime = performance.now();
+        const duration = Math.round(endTime - startTime);
+        const category = getSpeedCategory(duration);
+        
+        console.log(`❌ [${apiName}] API 에러 - ${duration}ms (${category})`, {
+          duration,
+          category,
+          error: error instanceof Error ? error.message : error,
+          timestamp: new Date().toISOString()
+        });
+        
+        throw error;
+      }
+    }
+  };
+};
+
+// 성능 통계 업데이트
+const updatePerformanceStats = (metrics: ApiRequestMetrics) => {
+  if (metrics.duration === undefined) return;
+  
+  performanceStats.totalRequests++;
+  performanceStats.totalDuration += metrics.duration;
+  performanceStats.avgDuration = Math.round(performanceStats.totalDuration / performanceStats.totalRequests);
+  
+  if (metrics.error) {
+    performanceStats.errorCount++;
+  } else {
+    performanceStats.successCount++;
+  }
+  
+  // 가장 빠른/느린 요청 업데이트
+  if (metrics.duration > performanceStats.slowestRequest.duration) {
+    performanceStats.slowestRequest = {
+      url: metrics.url,
+      duration: metrics.duration
+    };
+  }
+  
+  if (metrics.duration < performanceStats.fastestRequest.duration) {
+    performanceStats.fastestRequest = {
+      url: metrics.url,
+      duration: metrics.duration
+    };
+  }
+};
+
+// 성능 통계 조회
+export const getPerformanceStats = () => ({ ...performanceStats });
+
+// 성능 통계 리셋
+export const resetPerformanceStats = () => {
+  performanceStats.totalRequests = 0;
+  performanceStats.totalDuration = 0;
+  performanceStats.avgDuration = 0;
+  performanceStats.slowestRequest = { url: '', duration: 0 };
+  performanceStats.fastestRequest = { url: '', duration: Infinity };
+  performanceStats.errorCount = 0;
+  performanceStats.successCount = 0;
+  console.log('📊 API 성능 통계가 리셋되었습니다.');
+};
 
 // Axios 인스턴스 생성
 const createApiInstance = (): AxiosInstance => {
@@ -82,13 +246,21 @@ const createApiInstance = (): AxiosInstance => {
     }
   });
 
-  // 요청 인터셉터 (로깅 및 에러 처리)
+  // 요청 인터셉터 (응답시간 측정 시작)
   instance.interceptors.request.use(
     (config) => {
-      // 네트워크 최적화를 위한 헤더 동적 설정
-      const requestId = `${config.method}_${config.url}_${Date.now()}_${Math.random()}`;
-      const startTime = Date.now();
-      requestTimes.set(requestId, startTime);
+      // 요청 ID 생성 및 시작 시간 기록
+      const requestId = `${config.method}_${config.url}_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const startTime = performance.now();
+      
+      const metrics: ApiRequestMetrics = {
+        requestId,
+        method: config.method?.toUpperCase() || 'UNKNOWN',
+        url: config.url || '',
+        startTime
+      };
+      
+      requestTimes.set(requestId, metrics);
       
       // 요청 ID를 헤더에 추가하여 응답에서 추적 가능하게 함
       config.headers['X-Request-ID'] = requestId;
@@ -108,8 +280,8 @@ const createApiInstance = (): AxiosInstance => {
         keepAlive: config.headers['Connection'],
         withCredentials: config.withCredentials,
         origin: window.location.origin,
-        corsMode: 'cors',
-        requestId
+        requestId,
+        startTime: new Date().toISOString()
       });
       return config;
     },
@@ -119,56 +291,88 @@ const createApiInstance = (): AxiosInstance => {
     }
   );
 
-  // 응답 인터셉터 (로깅 및 에러 처리)
+  // 응답 인터셉터 (응답시간 측정 완료)
   instance.interceptors.response.use(
     (response: AxiosResponse) => {
       // 응답 시간 계산
       const requestId = response.config.headers['X-Request-ID'] as string;
-      const endTime = Date.now();
-      const startTime = requestTimes.get(requestId);
-      const duration = startTime ? endTime - startTime : 0;
+      const endTime = performance.now();
+      const metrics = requestTimes.get(requestId);
       
-      // 메모리 정리
-      if (requestId) {
+      if (metrics) {
+        metrics.endTime = endTime;
+        metrics.duration = Math.round(endTime - metrics.startTime);
+        metrics.status = response.status;
+        metrics.size = response.headers['content-length'] || 'unknown';
+        metrics.compression = response.headers['content-encoding'] || 'none';
+        
+        // 성능 통계 업데이트
+        updatePerformanceStats(metrics);
+        
+        // 메모리 정리
         requestTimes.delete(requestId);
+        
+        // 응답시간에 따른 로그 출력
+        const emoji = getSpeedEmoji(metrics.duration);
+        const category = getSpeedCategory(metrics.duration);
+        
+        console.log(`${emoji} API Response [${metrics.method} ${metrics.url}]`, {
+          '⏱️ 응답시간': `${metrics.duration}ms`,
+          '📊 성능등급': category,
+          '📋 상태코드': response.status,
+          '📦 크기': metrics.size,
+          '🗜️ 압축': metrics.compression,
+          '🔗 Keep-Alive': response.headers['connection'],
+          '🌍 CORS': {
+            allowOrigin: response.headers['access-control-allow-origin'],
+            allowCredentials: response.headers['access-control-allow-credentials'],
+            corsTime: response.headers['x-cors-processing-time']
+          },
+          '📈 통계': {
+            총요청수: performanceStats.totalRequests,
+            평균응답시간: `${performanceStats.avgDuration}ms`,
+            성공률: `${Math.round((performanceStats.successCount / performanceStats.totalRequests) * 100)}%`
+          },
+          '⏰ 완료시간': new Date().toISOString()
+        });
       }
       
-      console.log('✅ API Response:', {
-        status: response.status,
-        url: response.config.url,
-        duration: `${duration}ms`,
-        size: response.headers['content-length'] || 'unknown',
-        compression: response.headers['content-encoding'] || 'none',
-        keepAlive: response.headers['connection'],
-        cors: {
-          allowOrigin: response.headers['access-control-allow-origin'],
-          allowCredentials: response.headers['access-control-allow-credentials'],
-          vary: response.headers['vary'],
-          corsProcessingTime: response.headers['x-cors-processing-time']
-        },
-        data: response.data,
-      });
       return response;
     },
     (error) => {
       const requestId = error.config?.headers?.['X-Request-ID'] as string;
-      const endTime = Date.now();
-      const startTime = requestTimes.get(requestId);
-      const duration = startTime ? endTime - startTime : 0;
+      const endTime = performance.now();
+      const metrics = requestTimes.get(requestId);
       
-      // 메모리 정리
-      if (requestId) {
+      if (metrics) {
+        metrics.endTime = endTime;
+        metrics.duration = Math.round(endTime - metrics.startTime);
+        metrics.status = error.response?.status;
+        metrics.error = error;
+        
+        // 성능 통계 업데이트
+        updatePerformanceStats(metrics);
+        
+        // 메모리 정리
         requestTimes.delete(requestId);
+        
+        const category = getSpeedCategory(metrics.duration);
+        
+        console.error(`❌ API Error [${metrics.method} ${metrics.url}]`, {
+          '⏱️ 응답시간': `${metrics.duration}ms`,
+          '📊 성능등급': category,
+          '❌ 상태코드': error.response?.status || 'Network Error',
+          '💬 에러메시지': error.message,
+          '🔧 에러코드': error.code,
+          '📦 응답데이터': error.response?.data,
+          '📈 통계': {
+            총요청수: performanceStats.totalRequests,
+            에러율: `${Math.round((performanceStats.errorCount / performanceStats.totalRequests) * 100)}%`,
+            평균응답시간: `${performanceStats.avgDuration}ms`
+          },
+          '⏰ 에러시간': new Date().toISOString()
+        });
       }
-      
-      console.error('❌ API Response Error:', {
-        status: error.response?.status,
-        url: error.config?.url,
-        duration: `${duration}ms`,
-        message: error.message,
-        code: error.code,
-        data: error.response?.data,
-      });
 
       // CORS 및 네트워크 에러 처리 개선
       if (error.code === 'ERR_NETWORK' || (error.message === 'Network Error' && error.response?.status === undefined)) {
@@ -180,7 +384,7 @@ const createApiInstance = (): AxiosInstance => {
         });
         error.message = `CORS Error: 도메인 ${window.location.origin}에서 API 서버 접근이 차단되었습니다.`;
       } else if (error.code === 'ECONNABORTED') {
-        error.message = `요청 시간 초과 (${duration}ms): 서버 응답이 지연되고 있습니다.`;
+        error.message = `요청 시간 초과 (${metrics?.duration || 'unknown'}ms): 서버 응답이 지연되고 있습니다.`;
       } else if (error.message === 'Network Error') {
         error.message = '네트워크 오류: API 서버에 연결할 수 없습니다. 인터넷 연결을 확인해주세요.';
       } else if (error.response?.status === 0) {
