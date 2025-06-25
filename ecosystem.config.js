@@ -9,7 +9,7 @@ module.exports = {
       autorestart: true,
       watch: false,
       max_memory_restart: '512M',  // 프리 티어 최적화
-      node_args: '--max-old-space-size=400',  // Node.js 메모리 제한
+      node_args: '--max-old-space-size=320 --trace_gc --trace_gc_verbose --expose-gc',  // 메모리 누수 추적용 + 수동 GC
       env: {
         NODE_ENV: 'production',
         PORT: 3002
@@ -25,8 +25,8 @@ module.exports = {
     },
     {
       name: 'lovlechat-frontend',
-      script: 'serve',
-      args: ['-s', 'build', '-l', '3001'],
+      script: 'npx',
+      args: ['serve', '-s', 'build', '-p', '3001'],
       cwd: '/home/ubuntu/lovlechat/frontend',
       instances: 1,
       autorestart: true,
