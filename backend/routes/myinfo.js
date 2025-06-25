@@ -157,9 +157,13 @@ router.get('/', async (req, res) => {
 
   } catch (error) {
     console.error('MyInfo API 에러:', error);
+    console.error('에러 메시지:', error.message);
+    console.error('에러 스택:', error.stack);
+    console.error('사용자 ID:', userId);
     res.status(500).json({ 
       ok: false, 
       error: '사용자 정보를 불러올 수 없습니다.',
+      debug: error.message,
       responseTime: Date.now() - startTime
     });
   }
@@ -260,9 +264,13 @@ router.get('/stats', async (req, res) => {
 
   } catch (error) {
     console.error('MyInfo Stats API 에러:', error);
+    console.error('에러 메시지:', error.message);
+    console.error('에러 스택:', error.stack);
+    console.error('사용자 ID:', userId);
     res.status(500).json({ 
       ok: false, 
       error: '통계 정보를 불러올 수 없습니다.',
+      debug: error.message,
       responseTime: Date.now() - startTime
     });
   }
