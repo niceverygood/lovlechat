@@ -166,4 +166,60 @@ SELECT
   ROUND((DATA_LENGTH + INDEX_LENGTH) / 1024 / 1024, 2) as 'Total_MB'
 FROM INFORMATION_SCHEMA.TABLES 
 WHERE TABLE_SCHEMA = DATABASE()
-ORDER BY (DATA_LENGTH + INDEX_LENGTH) DESC; 
+ORDER BY (DATA_LENGTH + INDEX_LENGTH) DESC;
+
+-- LovleChat DB 성능 최적화 인덱스 추가
+-- 실행 전 반드시 백업을 권장합니다.
+
+-- 1. characters 테이블 인덱스
+-- userId 기반 조회 최적화
+ALTER TABLE character_profiles ADD INDEX idx_characters_userId (userId);
+
+-- scope 기반 조회 최적화 (공개 캐릭터 조회)
+ALTER TABLE character_profiles ADD INDEX idx_characters_scope (scope);
+
+-- 복합 인덱스: userId + scope 조회 최적화
+ALTER TABLE character_profiles ADD INDEX idx_characters_userId_scope (userId, scope);
+
+-- createdAt 기반 정렬 최적화
+ALTER TABLE character_profiles ADD INDEX idx_characters_created (createdAt);
+
+-- 2. personas 테이블 인덱스
+-- userId 기반 조회 최적화
+ALTER TABLE personas ADD INDEX idx_personas_userId (userId);
+
+-- 복합 인덱스: userId + createdAt 정렬 최적화
+ALTER TABLE personas ADD INDEX idx_personas_userId_created (userId, createdAt);
+
+-- 3. hearts 테이블 인덱스 (이미 있을 수 있지만 확인)
+-- uid는 이미 PRIMARY KEY일 가능성이 높지만 확인
+-- ALTER TABLE users ADD INDEX idx_users_uid (uid); -- 이미 있을 가능성
+
+-- 4. chats 테이블 인덱스
+-- characterId 기반 조회 최적화
+ALTER TABLE chats ADD INDEX idx_chats_characterId (characterId);
+
+-- personaId 기반 조회 최적화
+ALTER TABLE chats ADD INDEX idx_chats_personaId (personaId);
+
+-- 복합 인덱스: characterId + personaId 조회 최적화
+ALTER TABLE chats ADD INDEX idx_chats_char_persona (characterId, personaId);
+
+-- 복합 인덱스: characterId + personaId + createdAt 정렬 최적화
+ALTER TABLE chats ADD INDEX idx_chats_char_persona_created (characterId, personaId, createdAt);
+
+-- 5. 기존 인덱스 확인 쿼리
+-- SHOW INDEX FROM character_profiles;
+-- SHOW INDEX FROM personas;
+-- SHOW INDEX FROM users;
+-- SHOW INDEX FROM chats;
+
+-- 6. 인덱스 사용량 확인 쿼리 (실행 후 확인용)
+-- SELECT 
+--   DISTINCT TABLE_NAME,
+--   INDEX_NAME,
+--   COLUMN_NAME,
+--   CARDINALITY
+-- FROM information_schema.STATISTICS 
+-- WHERE TABLE_SCHEMA = 'lovlechat'
+-- ORDER BY TABLE_NAME, INDEX_NAME; 

@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router({ mergeParams: true });
-const { executeQuery, executeMutation, parseJsonSafely } = require('../services/db');
+const { executeQuery, executeOptimizedQuery, executeJoinQuery, executeMutation, parseJsonSafely } = require('../services/db');
 
-// GET /api/character/:id - 특정 캐릭터 조회
+// GET /api/character/:id - 특정 캐릭터 조회 (병렬 처리 최적화)
 router.get('/', async (req, res) => {
   const { id } = req.params;
+  const { userId } = req.query;
   
   const fallbackCharacter = {
     id: id,
@@ -18,20 +19,62 @@ router.get('/', async (req, res) => {
     profileImg: "/imgdefault.jpg",
     backgroundImg: "/imgdefault.jpg",
     firstScene: "조용한 카페에서 우연히 마주친 두 사람. 따뜻한 햇살이 창문으로 스며들고, 커피 향이 은은하게 퍼져있다.",
-    firstMessage: "안녕하세요! 혹시 여기 자주 오시나요? 처음 보는 얼굴 같은데..."
+    firstMessage: "안녕하세요! 혹시 여기 자주 오시나요? 처음 보는 얼굴 같은데...",
+    stats: { totalChats: 0, totalMessages: 0, avgFavor: 0 },
+    relatedCharacters: []
   };
   
   try {
-    const results = await executeQuery(
-      "SELECT id, profileImg, name, age, job, oneLiner, background, personality, habit, likes, dislikes, extraInfos, gender, scope, roomCode, category, tags, attachments, firstScene, firstMessage, backgroundImg, createdAt, updatedAt FROM character_profiles WHERE id = ?",
-      [id]
-    );
+    console.log('🚀 캐릭터 상세 조회 - 병렬 최적화 쿼리 시작');
+    console.time('parallelCharacterDetail');
 
-    if (results.length === 0) {
-      return res.json({ ok: true, character: fallbackCharacter });
+    // 기본 쿼리 배열
+    const baseQueries = [
+      // 캐릭터 기본 정보 (필수 컬럼만)
+      executeOptimizedQuery(
+        "SELECT id, profileImg, name, age, job, oneLiner, background, personality, habit, likes, dislikes, extraInfos, gender, scope, roomCode, category, tags, attachments, firstScene, firstMessage, backgroundImg, createdAt FROM character_profiles WHERE id = ?",
+        [id]
+      ),
+      
+      // 관련 캐릭터 추천 (같은 카테고리/태그)
+      executeOptimizedQuery(
+        "SELECT id, name, profileImg, age, job, oneLiner FROM character_profiles WHERE id != ? AND scope = '공개' ORDER BY RAND() LIMIT 4",
+        [id]
+      )
+    ];
+
+    // 🔥 사용자별 추가 데이터 (로그인한 경우에만)
+    if (userId && userId !== 'guest') {
+      baseQueries.push(
+        // 해당 캐릭터와의 채팅 통계
+        executeOptimizedQuery(`
+          SELECT 
+            COUNT(DISTINCT c.personaId) as totalChats,
+            COUNT(c.id) as totalMessages,
+            AVG(COALESCE(cf.favor, 0)) as avgFavor
+          FROM chats c
+          INNER JOIN personas p ON c.personaId = p.id
+          LEFT JOIN character_favors cf ON c.characterId = cf.characterId AND c.personaId = cf.personaId
+          WHERE c.characterId = ? AND p.userId = ?
+        `, [id, userId])
+      );
     }
 
-    const characterFromDb = results[0];
+    // 병렬 실행
+    const results = await Promise.all(baseQueries);
+    
+    console.timeEnd('parallelCharacterDetail');
+
+    if (results[0].length === 0) {
+      return res.json({ ok: true, character: fallbackCharacter, fallback: true });
+    }
+
+    const characterFromDb = results[0][0];
+    const relatedCharacters = results[1] || [];
+    const stats = userId && userId !== 'guest' && results[2] 
+      ? results[2][0] 
+      : { totalChats: 0, totalMessages: 0, avgFavor: 0 };
+
     const parsedCharacter = {
       ...characterFromDb,
       like: characterFromDb.likes,
@@ -40,6 +83,19 @@ router.get('/', async (req, res) => {
       selectedTags: parseJsonSafely(characterFromDb.tags, []), // 프론트 호환용
       attachments: parseJsonSafely(characterFromDb.attachments, []),
       extraInfos: parseJsonSafely(characterFromDb.extraInfos, {}),
+      stats: {
+        totalChats: stats.totalChats || 0,
+        totalMessages: stats.totalMessages || 0,
+        avgFavor: Math.round(stats.avgFavor || 0)
+      },
+      relatedCharacters: relatedCharacters.map(char => ({
+        id: char.id,
+        name: char.name,
+        profileImg: char.profileImg,
+        age: char.age,
+        job: char.job,
+        oneLiner: char.oneLiner
+      }))
     };
 
     res.json({ ok: true, character: parsedCharacter });

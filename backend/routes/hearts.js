@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { executeQuery, executeMutation } = require('../services/db');
+const { executeQuery, executeOptimizedQuery, executeMutation } = require('../services/db');
 
 // GET /api/hearts - 하트 잔액 조회 (병렬 처리 최적화)
 router.get('/', async (req, res) => {
@@ -14,19 +14,15 @@ router.get('/', async (req, res) => {
   }
 
   try {
-    // 병렬로 사용자 생성과 하트 조회 처리
-    const [, results] = await Promise.all([
-      executeMutation(
-        'INSERT IGNORE INTO users (userId, hearts, displayName, createdAt) VALUES (?, ?, ?, NOW())',
-        [userId, 100, `User_${userId}`]
-      ),
-      executeQuery(
-        'SELECT afterHearts FROM heart_transactions WHERE userId = ? ORDER BY createdAt DESC LIMIT 1',
-        [userId]
-      )
-    ]);
+    console.log('🔍 하트 잔액 최적화 쿼리 실행:', userId);
+    
+    // users 테이블에서 직접 하트 조회 (더 빠름)
+    const userResult = await executeOptimizedQuery(
+      'SELECT hearts FROM users WHERE uid = ? LIMIT 1',
+      [userId]
+    );
 
-    const hearts = results.length > 0 ? results[0].afterHearts : 100;
+    const hearts = userResult.length > 0 ? userResult[0].hearts : 100;
     
     // 캐싱 헤더 추가
     res.set({
@@ -132,7 +128,9 @@ router.get('/history', async (req, res) => {
   }
 
   try {
-    const transactions = await executeQuery(
+    console.log('🔍 하트 거래 내역 최적화 쿼리 실행:', userId);
+    
+    const transactions = await executeOptimizedQuery(
       'SELECT id, amount, type, description, beforeHearts, afterHearts, createdAt FROM heart_transactions WHERE userId = ? ORDER BY createdAt DESC LIMIT ?',
       [userId, Math.min(parseInt(limit), 50)]
     );

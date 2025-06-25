@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { executeQuery } = require('../services/db');
+const { executeQuery, executeOptimizedQuery, executeJoinQuery } = require('../services/db');
 const { cacheWrapper } = require('../services/cache');
 
 // GET /api/myinfo - 사용자 정보 통합 조회 (user + personas + hearts)
@@ -33,50 +33,58 @@ router.get('/', async (req, res) => {
 
     console.log('⭕ MyInfo 캐시 미스, DB 조회:', userId);
 
-    // 병렬로 모든 데이터 조회
+    console.log('🚀 MyInfo 통합 쿼리 시작 - 4개 병렬 최적화된 조회');
+
+    // 병렬로 모든 데이터 조회 (최적화된 쿼리 + EXPLAIN)
     const [userResult, personasResult, heartsResult, charactersResult] = await Promise.all([
-      // 사용자 기본 정보 (Firebase 정보 기반)
-      executeQuery(`
-        SELECT userId, displayName, createdAt
+      // 사용자 기본 정보 (필수 컬럼만)
+      executeOptimizedQuery(`
+        SELECT uid, displayName, email, createdAt
         FROM users 
-        WHERE userId = ? 
+        WHERE uid = ? 
         LIMIT 1
       `, [userId]),
       
-      // 사용자의 모든 페르소나
-      executeQuery(`
+      // 사용자의 모든 페르소나 (필수 컬럼만)
+      executeOptimizedQuery(`
         SELECT id, name, avatar, gender, age, job, info, habit, createdAt
         FROM personas 
         WHERE userId = ? 
         ORDER BY createdAt DESC
       `, [userId]),
       
-      // 최신 하트 잔액
-      executeQuery(`
-        SELECT afterHearts
-        FROM heart_transactions 
-        WHERE userId = ? 
-        ORDER BY createdAt DESC 
+      // 최신 하트 잔액 (hearts 컬럼만)
+      executeOptimizedQuery(`
+        SELECT hearts
+        FROM users 
+        WHERE uid = ? 
         LIMIT 1
       `, [userId]),
 
-      // 사용자가 생성한 캐릭터들
-      executeQuery(`
-        SELECT id, profileImg, name, tags, category, gender, scope, age, job, oneLiner, background, personality, habit, \`like\`, dislike, extraInfos, firstScene, firstMessage, backgroundImg, createdAt
-        FROM characters 
-        WHERE userId = ? AND isDeleted = FALSE
+      // 사용자가 생성한 캐릭터들 (필수 컬럼만)
+      executeOptimizedQuery(`
+        SELECT id, profileImg, name, tags, category, gender, scope, age, job, 
+               oneLiner, background, personality, habit, likes as \`like\`, 
+               dislikes as dislike, extraInfos, firstScene, firstMessage, 
+               backgroundImg, createdAt
+        FROM character_profiles 
+        WHERE userId = ? 
         ORDER BY createdAt DESC
       `, [userId])
     ]);
 
     // 사용자 정보 구성
     const user = userResult.length > 0 ? {
-      userId: userResult[0].userId,
-      name: userResult[0].displayName,
+      uid: userResult[0].uid,
+      userId: userResult[0].uid, // 호환성
+      name: userResult[0].displayName || "사용자",
+      email: userResult[0].email,
       createdAt: userResult[0].createdAt
     } : {
+      uid: userId,
       userId,
       name: "사용자",
+      email: null,
       createdAt: new Date()
     };
 
@@ -129,8 +137,8 @@ router.get('/', async (req, res) => {
       backgroundImg: char.backgroundImg
     }));
 
-    // 하트 잔액
-    const hearts = heartsResult.length > 0 ? heartsResult[0].afterHearts : 100;
+    // 하트 잔액 (users 테이블에서 직접 조회)
+    const hearts = heartsResult.length > 0 ? heartsResult[0].hearts : 100;
 
     const responseData = {
       ok: true,
@@ -189,37 +197,39 @@ router.get('/stats', async (req, res) => {
 
     console.log('⭕ MyInfo Stats 캐시 미스, DB 조회:', userId);
 
-    // 병렬로 통계 데이터 조회
+    console.log('🚀 MyInfo Stats 통합 쿼리 시작 - 3개 병렬 최적화된 조회');
+
+    // 병렬로 통계 데이터 조회 (최적화된 쿼리 + EXPLAIN)
     const [chatStats, favorStats, heartStats] = await Promise.all([
-      // 채팅 통계
-      executeQuery(`
+      // 채팅 통계 (필수 집계만)
+      executeOptimizedQuery(`
         SELECT 
           COUNT(DISTINCT CONCAT(c.personaId, '_', c.characterId)) as totalChats,
           COUNT(DISTINCT c.characterId) as activeCharacters,
-          COUNT(*) as totalMessages,
+          COUNT(c.id) as totalMessages,
           MAX(c.createdAt) as lastActivity
         FROM chats c
-        JOIN personas p ON c.personaId = p.id
+        INNER JOIN personas p ON c.personaId = p.id
         WHERE p.userId = ?
       `, [userId]),
       
-      // 호감도 통계
-      executeQuery(`
+      // 호감도 통계 (필수 집계만)
+      executeOptimizedQuery(`
         SELECT 
           AVG(cf.favor) as avgFavor,
           MAX(cf.favor) as maxFavor,
-          COUNT(*) as totalFavors
+          COUNT(cf.id) as totalFavors
         FROM character_favors cf
-        JOIN personas p ON cf.personaId = p.id
+        INNER JOIN personas p ON cf.personaId = p.id
         WHERE p.userId = ?
       `, [userId]),
       
-      // 하트 사용 통계
-      executeQuery(`
+      // 하트 사용 통계 (필수 집계만)
+      executeOptimizedQuery(`
         SELECT 
           SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as totalUsed,
           SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as totalEarned,
-          COUNT(*) as totalTransactions
+          COUNT(id) as totalTransactions
         FROM heart_transactions
         WHERE userId = ?
       `, [userId])

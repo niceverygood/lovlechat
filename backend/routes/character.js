@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { executeQueryWithCache, executeMutation } = require('../services/db');
+const { executeQueryWithCache, executeOptimizedQuery, executeMutation } = require('../services/db');
 
 // 환경 설정
 const MAX_USER_CHARACTERS = 10;
@@ -14,29 +14,47 @@ router.get('/', async (req, res) => {
   try {
     if (userId) {
       console.time('getUserCharacters');
-      const userCharacters = await executeQueryWithCache(
-        `SELECT id, profileImg, name, age, job, oneLiner, category, tags, attachments, likes, dislikes, firstScene, firstMessage, backgroundImg 
-         FROM character_profiles WHERE userId = ? ORDER BY createdAt DESC LIMIT ${MAX_USER_CHARACTERS}`,
-        [userId],
-        `user_characters_${userId}`,
-        60000 // 1분 캐시
+      console.log('🔍 사용자 캐릭터 최적화 쿼리 실행:', userId);
+      
+      const userCharacters = await executeOptimizedQuery(
+        `SELECT id, profileImg, name, age, job, oneLiner, category, tags, 
+                likes, dislikes, firstScene, firstMessage, backgroundImg, createdAt
+         FROM character_profiles 
+         WHERE userId = ? 
+         ORDER BY createdAt DESC 
+         LIMIT ${MAX_USER_CHARACTERS}`,
+        [userId]
       );
       console.timeEnd('getUserCharacters');
 
-      res.json({ ok: true, characters: userCharacters || [], type: 'user_characters' });
+      res.json({ 
+        ok: true, 
+        characters: userCharacters || [], 
+        type: 'user_characters',
+        count: userCharacters?.length || 0
+      });
       
     } else {
       console.time('getPublicCharacters');
-      const publicCharacters = await executeQueryWithCache(
-        `SELECT id, profileImg, name, age, job, oneLiner, tags, attachments, likes, dislikes, firstScene, firstMessage, backgroundImg 
-         FROM character_profiles WHERE scope = '공개' ORDER BY RAND() LIMIT ${MAX_PUBLIC_CHARACTERS}`,
-        [],
-        'public_characters',
-        300000 // 5분 캐시
+      console.log('🔍 공개 캐릭터 최적화 쿼리 실행');
+      
+      const publicCharacters = await executeOptimizedQuery(
+        `SELECT id, profileImg, name, age, job, oneLiner, tags, 
+                likes, dislikes, firstScene, firstMessage, backgroundImg, createdAt
+         FROM character_profiles 
+         WHERE scope = '공개' 
+         ORDER BY RAND() 
+         LIMIT ${MAX_PUBLIC_CHARACTERS}`,
+        []
       );
       console.timeEnd('getPublicCharacters');
 
-      res.json({ ok: true, characters: publicCharacters || [], type: 'public_characters' });
+      res.json({ 
+        ok: true, 
+        characters: publicCharacters || [], 
+        type: 'public_characters',
+        count: publicCharacters?.length || 0
+      });
     }
     console.timeEnd('getCharacters');
     

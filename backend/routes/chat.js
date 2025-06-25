@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { executeQuery, executeMutation } = require('../services/db');
+const { executeQuery, executeOptimizedQuery, executeJoinQuery, executeMutation } = require('../services/db');
 const { createChatCompletion, isOpenAIAvailable, generateFallbackResponse, generateImmersivePrompt } = require('../services/openai');
 const { processFavorChange, getFavor, filterFavorKeywords } = require('../services/favorCalculator');
 
@@ -83,35 +83,41 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // 캐릭터 정보 조회
-    console.time('getCharacter');
-    const characters = await executeQuery(
-      "SELECT * FROM character_profiles WHERE id = ?",
-      [characterId]
-    );
-    console.timeEnd('getCharacter');
+    console.log('🚀 채팅 전송 - 3개 병렬 최적화 쿼리 시작');
+    console.time('parallelChatData');
+
+    // 🔥 병렬 처리: 캐릭터 정보, 페르소나 정보, 대화내역을 동시에 조회
+    const [characters, personas, chatRows] = await Promise.all([
+      // 캐릭터 정보 (필수 컬럼만)
+      executeOptimizedQuery(
+        "SELECT id, name, profileImg, age, job, background, personality, habit, likes, dislikes, firstScene, firstMessage FROM character_profiles WHERE id = ?",
+        [characterId]
+      ),
+      
+      // 페르소나 정보 (필수 컬럼만)
+      executeOptimizedQuery(
+        "SELECT id, name, avatar, gender, age, job, info, habit FROM personas WHERE id = ?",
+        [personaId]
+      ),
+      
+      // 최근 대화내역 (필수 컬럼만, 20개)
+      executeOptimizedQuery(
+        "SELECT id, sender, message, createdAt FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt DESC LIMIT 20",
+        [personaId, characterId]
+      )
+    ]);
+
+    console.timeEnd('parallelChatData');
+
     if (characters.length === 0) {
       return res.status(404).json({ 
         ok: false, 
         error: "Character not found" 
       });
     }
+
     const character = characters[0];
-
-    // 페르소나 정보 조회
-    const personas = await executeQuery(
-      "SELECT * FROM personas WHERE id = ?",
-      [personaId]
-    );
     const persona = personas[0] || {};
-
-    // 최근 대화내역 조회 (최신 20개, 오래된 순) - 필요한 컬럼만 선택
-    console.time('getChatHistory');
-    const chatRows = await executeQuery(
-      "SELECT id, sender, message, createdAt FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt DESC LIMIT 20",
-      [personaId, characterId]
-    );
-    console.timeEnd('getChatHistory');
     const chatHistory = chatRows.reverse();
 
     // 몰입형 system prompt 생성
@@ -214,32 +220,29 @@ router.get('/', async (req, res) => {
       return res.json({ ok: true, messages: [], favor: 0 });
     }
     
-    // 메시지 조회
-    console.time('getMessages');
-    
-    // 개발 환경에서만 성능 분석
-    if (process.env.NODE_ENV === 'development') {
-      const explainMessages = await executeQuery(
-        "EXPLAIN SELECT id, sender, message, createdAt FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT ? OFFSET ?",
+    console.log('🚀 채팅 히스토리 조회 - 3개 병렬 최적화 쿼리 시작');
+    console.time('parallelChatHistory');
+
+    // 🔥 병렬 처리: 메시지 조회, 개수 조회, 호감도 조회를 동시에 실행
+    const [messages, totalCountResult, currentFavor] = await Promise.all([
+      // 메시지 조회 (필수 컬럼만, 페이징)
+      executeOptimizedQuery(
+        "SELECT id, sender, message, createdAt FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT ? OFFSET ?",
         [personaId, characterId, limitNum, offset]
-      );
-    }
-    
-    const messages = await executeQuery(
-      "SELECT id, sender, message, createdAt FROM chats WHERE personaId = ? AND characterId = ? ORDER BY createdAt ASC LIMIT ? OFFSET ?",
-      [personaId, characterId, limitNum, offset]
-    );
-    console.timeEnd('getMessages');
-    
-    // 전체 메시지 개수 조회 (페이징 정보용)
-    const totalCountResult = await executeQuery(
-      "SELECT COUNT(*) as total FROM chats WHERE personaId = ? AND characterId = ?",
-      [personaId, characterId]
-    );
+      ),
+      
+      // 전체 메시지 개수 (페이징 정보용)
+      executeOptimizedQuery(
+        "SELECT COUNT(id) as total FROM chats WHERE personaId = ? AND characterId = ?",
+        [personaId, characterId]
+      ),
+      
+      // 현재 호감도 조회
+      getFavor(personaId, characterId)
+    ]);
+
+    console.timeEnd('parallelChatHistory');
     const totalMessages = totalCountResult[0].total;
-    
-    // 현재 호감도 조회
-    const currentFavor = await getFavor(personaId, characterId);
     
     res.json({ 
       ok: true, 
@@ -276,41 +279,11 @@ router.get('/list', async (req, res) => {
   }
 
   try {
-    // 사용자의 채팅 목록을 조회 (최신 메시지와 함께)
-    console.time('getChatListQuery');
+    console.log('🚀 채팅 목록 조회 - JOIN 최적화 쿼리 시작');
+    console.time('optimizedChatListQuery');
     
-    // 성능 분석을 위한 EXPLAIN 쿼리 (JOIN 최적화 버전)
-    const explainResult = await executeQuery(`
-      EXPLAIN SELECT 
-        c.characterId,
-        c.personaId,
-        cp.name,
-        cp.profileImg,
-        p.name as personaName,
-        p.avatar as personaAvatar,
-        cm.message as lastMessage,
-        c.lastChatTime
-      FROM (
-        SELECT 
-          characterId,
-          personaId,
-          MAX(createdAt) as lastChatTime
-        FROM chats
-        GROUP BY characterId, personaId
-      ) c
-      LEFT JOIN character_profiles cp ON c.characterId = cp.id
-      LEFT JOIN personas p ON c.personaId = p.id
-      LEFT JOIN chats cm ON c.characterId = cm.characterId 
-                         AND c.personaId = cm.personaId 
-                         AND c.lastChatTime = cm.createdAt
-      WHERE p.userId = ?
-      ORDER BY c.lastChatTime DESC
-      LIMIT 20
-    `, [userId]);
-    console.log('🔍 Chat List Query EXPLAIN:', JSON.stringify(explainResult, null, 2));
-    
-    // N+1 쿼리 문제 해결: 서브쿼리를 JOIN으로 최적화
-    const chats = await executeQuery(`
+    // 🔥 최적화된 JOIN 쿼리: 윈도우 함수 사용으로 성능 개선
+    const chats = await executeJoinQuery(`
       SELECT 
         c.characterId,
         c.personaId,
@@ -318,26 +291,24 @@ router.get('/list', async (req, res) => {
         cp.profileImg,
         p.name as personaName,
         p.avatar as personaAvatar,
-        cm.message as lastMessage,
-        c.lastChatTime
+        c.message as lastMessage,
+        c.createdAt as lastChatTime
       FROM (
         SELECT 
           characterId,
           personaId,
-          MAX(createdAt) as lastChatTime
+          message,
+          createdAt,
+          ROW_NUMBER() OVER (PARTITION BY characterId, personaId ORDER BY createdAt DESC) as rn
         FROM chats
-        GROUP BY characterId, personaId
       ) c
-      LEFT JOIN character_profiles cp ON c.characterId = cp.id
-      LEFT JOIN personas p ON c.personaId = p.id
-      LEFT JOIN chats cm ON c.characterId = cm.characterId 
-                         AND c.personaId = cm.personaId 
-                         AND c.lastChatTime = cm.createdAt
-      WHERE p.userId = ?
-      ORDER BY c.lastChatTime DESC
+      INNER JOIN character_profiles cp ON c.characterId = cp.id
+      INNER JOIN personas p ON c.personaId = p.id
+      WHERE c.rn = 1 AND p.userId = ?
+      ORDER BY c.createdAt DESC
       LIMIT 20
     `, [userId]);
-    console.timeEnd('getChatListQuery');
+    console.timeEnd('optimizedChatListQuery');
     
     res.json({ ok: true, chats });
     console.timeEnd('getChatList');

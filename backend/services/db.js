@@ -59,21 +59,47 @@ async function checkConnection() {
   }
 }
 
-// 쿼리 실행 (SELECT) - 에러 처리 강화
-async function executeQuery(query, params = []) {
+// 쿼리 실행 (SELECT) - 성능 분석 강화
+async function executeQuery(query, params = [], enableExplain = false) {
   let connection = null;
+  const startTime = Date.now();
+  
   try {
     const pool = getPool();
     connection = await pool.getConnection();
     
     console.log('🔍 SQL 실행:', query.substring(0, 100) + (query.length > 100 ? '...' : ''));
     
+    // EXPLAIN 실행 (개발 환경에서만)
+    if (enableExplain && process.env.NODE_ENV === 'development' && query.trim().toUpperCase().startsWith('SELECT')) {
+      try {
+        const [explainRows] = await connection.execute(`EXPLAIN ${query}`, params);
+        console.log('📊 쿼리 실행 계획:');
+        explainRows.forEach((row, index) => {
+          console.log(`   ${index + 1}. ${row.select_type} | ${row.table} | ${row.type} | ${row.key || 'No Index'} | rows: ${row.rows}`);
+        });
+      } catch (explainError) {
+        console.warn('⚠️ EXPLAIN 실행 실패:', explainError.message);
+      }
+    }
+    
     const [rows] = await connection.execute(query, params);
+    const duration = Date.now() - startTime;
+    
+    console.log(`⚡ 쿼리 실행 완료: ${duration}ms (${rows.length}행)`);
+    
+    // 느린 쿼리 경고 (100ms 이상)
+    if (duration > 100) {
+      console.warn(`🐌 느린 쿼리 감지: ${duration}ms - 최적화 필요`);
+    }
+    
     return rows;
   } catch (error) {
+    const duration = Date.now() - startTime;
     console.error('❌ 쿼리 실행 에러:', error.message);
     console.error('🔍 실행된 쿼리:', query);
     console.error('📊 파라미터:', params);
+    console.error(`⏱️ 실행 시간: ${duration}ms`);
     throw error;
   } finally {
     if (connection) {
@@ -217,10 +243,29 @@ process.on('SIGTERM', async () => {
   process.exit(0);
 });
 
+// 최적화된 쿼리 실행 (SELECT 필드 명시 + EXPLAIN)
+async function executeOptimizedQuery(query, params = []) {
+  return executeQuery(query, params, true);
+}
+
+// JOIN 기반 통합 쿼리 실행
+async function executeJoinQuery(query, params = []) {
+  const startTime = Date.now();
+  console.log('🔗 JOIN 쿼리 실행:', query.substring(0, 150) + (query.length > 150 ? '...' : ''));
+  
+  const result = await executeOptimizedQuery(query, params);
+  const duration = Date.now() - startTime;
+  
+  console.log(`🚀 JOIN 쿼리 완료: ${duration}ms`);
+  return result;
+}
+
 module.exports = {
   getPool,
   checkConnection,
   executeQuery,
+  executeOptimizedQuery,
+  executeJoinQuery,
   executeMutation,
   executeQueryWithCache,
   executeTransaction,
