@@ -16,13 +16,13 @@ router.get('/', async (req, res) => {
   try {
     console.log('🔍 하트 잔액 최적화 쿼리 실행:', userId);
     
-    // users 테이블에서 직접 하트 조회 (더 빠름)
-    const userResult = await executeOptimizedQuery(
-      'SELECT hearts FROM users WHERE uid = ? LIMIT 1',
+    // 하트 거래 내역에서 최신 잔액 조회 (안전함)
+    const balanceResult = await executeQuery(
+      'SELECT afterHearts FROM heart_transactions WHERE userId = ? ORDER BY createdAt DESC LIMIT 1',
       [userId]
     );
 
-    const hearts = userResult.length > 0 ? userResult[0].hearts : 100;
+    const hearts = balanceResult.length > 0 ? balanceResult[0].afterHearts : 100;
     
     // 캐싱 헤더 추가
     res.set({
@@ -130,7 +130,7 @@ router.get('/history', async (req, res) => {
   try {
     console.log('🔍 하트 거래 내역 최적화 쿼리 실행:', userId);
     
-    const transactions = await executeOptimizedQuery(
+    const transactions = await executeQuery(
       'SELECT id, amount, type, description, beforeHearts, afterHearts, createdAt FROM heart_transactions WHERE userId = ? ORDER BY createdAt DESC LIMIT ?',
       [userId, Math.min(parseInt(limit), 50)]
     );

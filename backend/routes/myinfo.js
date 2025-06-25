@@ -35,10 +35,10 @@ router.get('/', async (req, res) => {
 
     console.log('🚀 MyInfo 통합 쿼리 시작 - 4개 병렬 최적화된 조회');
 
-    // 병렬로 모든 데이터 조회 (최적화된 쿼리 + EXPLAIN)
+    // 병렬로 모든 데이터 조회 (안전한 쿼리)
     const [userResult, personasResult, heartsResult, charactersResult] = await Promise.all([
       // 사용자 기본 정보 (필수 컬럼만)
-      executeOptimizedQuery(`
+      executeQuery(`
         SELECT uid, displayName, email, createdAt
         FROM users 
         WHERE uid = ? 
@@ -46,23 +46,24 @@ router.get('/', async (req, res) => {
       `, [userId]),
       
       // 사용자의 모든 페르소나 (필수 컬럼만)
-      executeOptimizedQuery(`
+      executeQuery(`
         SELECT id, name, avatar, gender, age, job, info, habit, createdAt
         FROM personas 
         WHERE userId = ? 
         ORDER BY createdAt DESC
       `, [userId]),
       
-      // 최신 하트 잔액 (hearts 컬럼만)
-      executeOptimizedQuery(`
-        SELECT hearts
-        FROM users 
-        WHERE uid = ? 
+      // 최신 하트 잔액 (거래 내역에서 조회)
+      executeQuery(`
+        SELECT afterHearts
+        FROM heart_transactions 
+        WHERE userId = ? 
+        ORDER BY createdAt DESC 
         LIMIT 1
       `, [userId]),
 
       // 사용자가 생성한 캐릭터들 (필수 컬럼만)
-      executeOptimizedQuery(`
+      executeQuery(`
         SELECT id, profileImg, name, tags, category, gender, scope, age, job, 
                oneLiner, background, personality, habit, likes as \`like\`, 
                dislikes as dislike, extraInfos, firstScene, firstMessage, 
@@ -137,8 +138,8 @@ router.get('/', async (req, res) => {
       backgroundImg: char.backgroundImg
     }));
 
-    // 하트 잔액 (users 테이블에서 직접 조회)
-    const hearts = heartsResult.length > 0 ? heartsResult[0].hearts : 100;
+    // 하트 잔액 (거래 내역에서 조회)
+    const hearts = heartsResult.length > 0 ? heartsResult[0].afterHearts : 100;
 
     const responseData = {
       ok: true,
@@ -199,10 +200,10 @@ router.get('/stats', async (req, res) => {
 
     console.log('🚀 MyInfo Stats 통합 쿼리 시작 - 3개 병렬 최적화된 조회');
 
-    // 병렬로 통계 데이터 조회 (최적화된 쿼리 + EXPLAIN)
+    // 병렬로 통계 데이터 조회 (안전한 쿼리)
     const [chatStats, favorStats, heartStats] = await Promise.all([
       // 채팅 통계 (필수 집계만)
-      executeOptimizedQuery(`
+      executeQuery(`
         SELECT 
           COUNT(DISTINCT CONCAT(c.personaId, '_', c.characterId)) as totalChats,
           COUNT(DISTINCT c.characterId) as activeCharacters,
@@ -214,7 +215,7 @@ router.get('/stats', async (req, res) => {
       `, [userId]),
       
       // 호감도 통계 (필수 집계만)
-      executeOptimizedQuery(`
+      executeQuery(`
         SELECT 
           AVG(cf.favor) as avgFavor,
           MAX(cf.favor) as maxFavor,
@@ -225,7 +226,7 @@ router.get('/stats', async (req, res) => {
       `, [userId]),
       
       // 하트 사용 통계 (필수 집계만)
-      executeOptimizedQuery(`
+      executeQuery(`
         SELECT 
           SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as totalUsed,
           SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as totalEarned,
