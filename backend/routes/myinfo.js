@@ -3,6 +3,91 @@ const router = express.Router();
 const { executeQuery, executeOptimizedQuery, executeJoinQuery } = require('../services/db');
 const { cacheWrapper } = require('../services/cache');
 
+// GET /api/myinfo/basic - 기본 사용자 정보 및 하트만 (경량화)
+router.get('/basic', async (req, res) => {
+  const startTime = Date.now();
+  const { userId } = req.query;
+
+  if (!userId || userId === 'guest') {
+    return res.json({
+      ok: true,
+      user: { userId: "guest", name: "게스트" },
+      hearts: 0,
+      responseTime: Date.now() - startTime
+    });
+  }
+
+  try {
+    // 캐시에서 먼저 확인 (별도 캐시 키 사용)
+    const cachedData = await cacheWrapper.getBasicProfile(userId);
+    if (cachedData) {
+      console.log('🚀 BasicProfile 캐시 히트:', userId);
+      return res.json({
+        ...cachedData,
+        fromCache: true,
+        responseTime: Date.now() - startTime
+      });
+    }
+
+    console.log('⭕ BasicProfile 캐시 미스, DB 조회:', userId);
+
+    // 병렬로 기본 정보만 조회 (최소한의 쿼리)
+    const [userResult, heartsResult] = await Promise.all([
+      // 사용자 기본 정보 (필수 컬럼만)
+      executeQuery(`
+        SELECT userId, displayName, email, createdAt
+        FROM users 
+        WHERE userId = ? 
+        LIMIT 1
+      `, [userId]),
+      
+      // 최신 하트 잔액만
+      executeQuery(`
+        SELECT afterHearts
+        FROM heart_transactions 
+        WHERE userId = ? 
+        ORDER BY createdAt DESC 
+        LIMIT 1
+      `, [userId])
+    ]);
+
+    const user = userResult.length > 0 ? {
+      userId: userResult[0].userId,
+      name: userResult[0].displayName || "사용자",
+      email: userResult[0].email,
+      createdAt: userResult[0].createdAt
+    } : {
+      userId,
+      name: "사용자",
+      email: null,
+      createdAt: new Date()
+    };
+
+    const hearts = heartsResult.length > 0 ? heartsResult[0].afterHearts : 100;
+
+    const responseData = {
+      ok: true,
+      user,
+      hearts,
+      responseTime: Date.now() - startTime
+    };
+
+    // 캐시에 저장 (2분)
+    await cacheWrapper.setBasicProfile(userId, responseData);
+
+    res.json(responseData);
+
+  } catch (error) {
+    console.error('BasicProfile API 에러:', error);
+    res.status(500).json({ 
+      ok: false, 
+      error: '기본 프로필 정보를 불러올 수 없습니다.',
+      debug: error.message,
+      responseTime: Date.now() - startTime
+    });
+  }
+});
+
 // GET /api/myinfo - 사용자 정보 통합 조회 (user + personas + hearts)
 router.get('/', async (req, res) => {
   const startTime = Date.now();
@@ -223,7 +308,7 @@ router.get('/stats', async (req, res) => {
         SELECT 
           AVG(cf.favor) as avgFavor,
           MAX(cf.favor) as maxFavor,
-          COUNT(cf.id) as totalFavors
+          COUNT(*) as totalFavors
         FROM character_favors cf
         INNER JOIN personas p ON cf.personaId = p.id
         WHERE p.userId = ?

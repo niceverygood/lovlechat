@@ -135,6 +135,105 @@ router.post('/', async (req, res) => {
   }
 });
 
+// GET /api/character/user/:userId - 사용자별 캐릭터 페이지네이션 조회
+router.get('/user/:userId', async (req, res) => {
+  const startTime = Date.now();
+  const { userId } = req.params;
+  const page = parseInt(req.query.page) || 0;
+  const limit = parseInt(req.query.limit) || 10;
+  const offset = page * limit;
+
+  try {
+    console.log('🔍 사용자 캐릭터 페이지네이션 쿼리 실행:', { userId, page, limit, offset });
+
+    // 총 개수와 데이터를 병렬로 조회
+    const [countResult, charactersResult] = await Promise.all([
+      executeOptimizedQuery(
+        `SELECT COUNT(*) as total FROM character_profiles WHERE userId = ?`,
+        [userId]
+      ),
+      executeOptimizedQuery(
+        `SELECT id, profileImg, name, tags, category, gender, scope, age, job, 
+                oneLiner, background, personality, habit, likes as \`like\`, 
+                dislikes as dislike, extraInfos, firstScene, firstMessage, 
+                backgroundImg, createdAt
+         FROM character_profiles 
+         WHERE userId = ? 
+         ORDER BY createdAt DESC 
+         LIMIT ? OFFSET ?`,
+        [userId, limit, offset]
+      )
+    ]);
+
+    const total = countResult[0]?.total || 0;
+    const characters = charactersResult || [];
+    const hasMore = (offset + characters.length) < total;
+
+    // 태그 파싱
+    const parsedCharacters = characters.map(char => ({
+      ...char,
+      tags: (() => {
+        try {
+          if (Array.isArray(char.tags)) return char.tags;
+          if (typeof char.tags === 'string' && char.tags.startsWith('[')) {
+            return JSON.parse(char.tags);
+          }
+          if (typeof char.tags === 'string' && char.tags.length > 0) {
+            return char.tags.split(',').map(t => t.trim());
+          }
+          return [];
+        } catch (e) {
+          return [];
+        }
+      })(),
+      selectedTags: (() => {
+        try {
+          if (Array.isArray(char.tags)) return char.tags;
+          if (typeof char.tags === 'string' && char.tags.startsWith('[')) {
+            return JSON.parse(char.tags);
+          }
+          if (typeof char.tags === 'string' && char.tags.length > 0) {
+            return char.tags.split(',').map(t => t.trim());
+          }
+          return [];
+        } catch (e) {
+          return [];
+        }
+      })()
+    }));
+
+    const responseData = {
+      ok: true,
+      characters: parsedCharacters,
+      total,
+      page,
+      limit,
+      hasMore,
+      responseTime: Date.now() - startTime
+    };
+
+    console.log('✅ 사용자 캐릭터 페이지네이션 응답:', {
+      userId,
+      page,
+      count: characters.length,
+      total,
+      hasMore,
+      responseTime: responseData.responseTime
+    });
+
+    res.json(responseData);
+
+  } catch (error) {
+    console.error('사용자 캐릭터 페이지네이션 에러:', error);
+    res.status(500).json({ 
+      ok: false, 
+      error: "캐릭터 데이터를 불러올 수 없습니다.",
+      details: error.message,
+      responseTime: Date.now() - startTime
+    });
+  }
+});
+
 // Character ID별 라우트
 router.use('/:id', require('./character-id'));
 

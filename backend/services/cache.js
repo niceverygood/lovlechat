@@ -289,6 +289,17 @@ const cacheWrapper = {
   async setFavor(personaId, characterId, favorData) {
     const key = cacheService.generateKey('favor', personaId, characterId);
     return await cacheService.set(key, favorData, cacheService.TTL.SHORT);
+  },
+
+  // 기본 프로필 캐시 (경량화된 정보)
+  async getBasicProfile(userId) {
+    const key = cacheService.generateKey('basic_profile', userId);
+    return await cacheService.get(key);
+  },
+
+  async setBasicProfile(userId, data) {
+    const key = cacheService.generateKey('basic_profile', userId);
+    return await cacheService.set(key, data, cacheService.TTL.SHORT); // 2분 캐시
   }
 };
 
