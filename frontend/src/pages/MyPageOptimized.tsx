@@ -836,19 +836,17 @@ export default function MyPageOptimized() {
             setShowProfileDetailModal(false);
             setSelectedProfile(null);
           }}
-          profileData={selectedProfile}
+          profile={selectedProfile}
         />
       )}
 
       {/* 알림 모달 */}
-      {alertOpen && (
-        <CustomAlert
-          isOpen={alertOpen}
-          title={alertTitle}
-          message={alertMsg}
-          onClose={() => setAlertOpen(false)}
-        />
-      )}
+      <CustomAlert
+        open={alertOpen}
+        title={alertTitle}
+        message={alertMsg}
+        onConfirm={() => setAlertOpen(false)}
+      />
     </div>
   );
 } 
