@@ -1,10 +1,22 @@
 import React from 'react';
 import { DEFAULT_PROFILE_IMAGE, handleProfileImageError } from '../utils/constants';
 
+interface Persona {
+  id: string;
+  userId?: string;
+  name: string;
+  avatar: string;
+  gender?: string;
+  age?: string;
+  job?: string;
+  info?: string;
+  habit?: string;
+}
+
 interface ProfileDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
-  profile: {
+  profile?: {
     id: string;
     name: string;
     avatar: string;
@@ -14,13 +26,19 @@ interface ProfileDetailModalProps {
     info?: string;
     habit?: string;
   };
+  profileData?: Persona;
   editMode?: boolean;
   onSave?: () => void;
   isMe?: boolean;
 }
 
-export default function ProfileDetailModal({ isOpen, onClose, profile, isMe = false }: ProfileDetailModalProps) {
+export default function ProfileDetailModal({ isOpen, onClose, profile, profileData, isMe = false }: ProfileDetailModalProps) {
   if (!isOpen) return null;
+  
+  // profileData가 전달되면 우선 사용, 없으면 profile 사용
+  const displayProfile = profileData || profile;
+  
+  if (!displayProfile) return null;
 
   return (
     <div style={{
@@ -73,8 +91,8 @@ export default function ProfileDetailModal({ isOpen, onClose, profile, isMe = fa
           marginBottom: 16 
         }}>
           <img
-            src={profile.avatar || DEFAULT_PROFILE_IMAGE}
-            alt={profile.name}
+            src={displayProfile.avatar || DEFAULT_PROFILE_IMAGE}
+            alt={displayProfile.name}
             style={{ 
               width: 80, 
               height: 80, 
@@ -94,7 +112,7 @@ export default function ProfileDetailModal({ isOpen, onClose, profile, isMe = fa
           textAlign: 'center',
           marginBottom: 8
         }}>
-          {profile.name}
+          {displayProfile.name}
         </div>
 
         {/* 기본 정보 (나이, 성별, 직업) */}
@@ -105,14 +123,14 @@ export default function ProfileDetailModal({ isOpen, onClose, profile, isMe = fa
           marginBottom: 16
         }}>
           {[
-            profile.age && `${profile.age}살`,
-            profile.gender,
-            profile.job
+            displayProfile.age && `${displayProfile.age}살`,
+            displayProfile.gender,
+            displayProfile.job
           ].filter(Boolean).join(' · ') || '정보 없음'}
         </div>
 
         {/* 추가 정보 */}
-        {profile.info && (
+        {displayProfile.info && (
           <div style={{ 
             color: '#ccc', 
             fontSize: 14, 
@@ -124,12 +142,12 @@ export default function ProfileDetailModal({ isOpen, onClose, profile, isMe = fa
             borderRadius: 12,
             border: '1px solid rgba(255,255,255,0.1)'
           }}>
-            {profile.info}
+            {displayProfile.info}
           </div>
         )}
 
         {/* 습관 정보 */}
-        {profile.habit && (
+        {displayProfile.habit && (
           <div style={{ 
             color: '#ddd', 
             fontSize: 14, 
@@ -141,7 +159,7 @@ export default function ProfileDetailModal({ isOpen, onClose, profile, isMe = fa
             border: '1px solid rgba(108, 92, 231, 0.3)'
           }}>
             <div style={{ color: '#9c88ff', fontWeight: 600, marginBottom: 4 }}>특징</div>
-            {profile.habit}
+            {displayProfile.habit}
           </div>
         )}
       </div>
