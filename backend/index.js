@@ -30,23 +30,36 @@ app.use(compression({
   memLevel: 8 // 메모리 사용량 (1-9)
 }));
 
-// Keep-Alive 설정
+// Keep-Alive 및 성능 최적화 설정
 app.use((req, res, next) => {
+  const startTime = Date.now();
+  
   // Keep-Alive 헤더 설정
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('Keep-Alive', 'timeout=30, max=1000');
   
-  // 캐시 관련 헤더 최적화
-  if (req.method === 'GET') {
-    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
+  // CORS preflight 요청 최적화
+  if (req.method === 'OPTIONS') {
+    // preflight 응답 최적화
+    res.setHeader('Access-Control-Max-Age', '86400'); // 24시간
+    res.setHeader('Cache-Control', 'public, max-age=86400'); // preflight 캐싱
+    
+    // preflight 응답 시간 측정
+    res.on('finish', () => {
+      const duration = Date.now() - startTime;
+      console.log(`⚡ CORS Preflight completed in ${duration}ms`);
+    });
+  } else {
+    // 일반 요청 캐시 설정
+    if (req.method === 'GET') {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
   }
   
-  // CORS preflight 캐싱
-  if (req.method === 'OPTIONS') {
-    res.setHeader('Access-Control-Max-Age', '86400'); // 24시간
-  }
+  // CORS 처리 성능 헤더 추가
+  res.setHeader('X-CORS-Processing-Time', `${Date.now() - startTime}ms`);
   
   next();
 });
@@ -58,16 +71,93 @@ app.use(helmet({
 }));
 
 // CORS 설정 최적화
+const allowedOrigins = [
+  'https://lovlechat.vercel.app',
+  'https://lovlechat.vercel.app/', // trailing slash 버전
+  'https://lovlechat-git-main-niceverygood.vercel.app', // git branch 배포
+  'https://lovlechat-niceverygood.vercel.app', // 팀 도메인
+  'http://localhost:3000', // 로컬 개발
+  'http://localhost:3001', // 로컬 serve
+  'http://54.79.211.48:3001', // EC2 frontend
+  process.env.FRONTEND_URL // 환경변수로 지정된 도메인
+].filter(Boolean); // undefined 제거
+
+console.log('🌐 허용된 CORS Origins:', allowedOrigins);
+
+// CORS 로깅 미들웨어
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  const method = req.method;
+  
+  if (method === 'OPTIONS') {
+    console.log(`🔍 CORS Preflight: ${origin} → ${req.url}`);
+    console.log(`📋 Request Headers: ${req.headers['access-control-request-headers'] || 'None'}`);
+    console.log(`📋 Request Method: ${req.headers['access-control-request-method'] || 'GET'}`);
+  } else if (origin) {
+    console.log(`🌍 CORS Request: ${origin} → ${method} ${req.url}`);
+  }
+  
+  next();
+});
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: function(origin, callback) {
+    // origin이 없는 경우 (같은 도메인에서의 요청) 허용
+    if (!origin) {
+      console.log('✅ CORS: Same-origin request allowed');
+      return callback(null, true);
+    }
+    
+    // 허용된 origin인지 확인
+    if (allowedOrigins.includes(origin)) {
+      console.log(`✅ CORS: Origin allowed - ${origin}`);
+      return callback(null, true);
+    }
+    
+    // Vercel preview 도메인 패턴 확인
+    if (origin.match(/^https:\/\/lovlechat-.*\.vercel\.app$/)) {
+      console.log(`✅ CORS: Vercel preview allowed - ${origin}`);
+      return callback(null, true);
+    }
+    
+    console.error(`❌ CORS: Origin blocked - ${origin}`);
+    const error = new Error(`CORS policy: Origin ${origin} is not allowed`);
+    error.status = 403;
+    return callback(error, false);
+  },
   credentials: true,
   optionsSuccessStatus: 200, // IE11 호환성
-  maxAge: 86400 // preflight 캐시 24시간
+  maxAge: 86400, // preflight 캐시 24시간
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'Accept',
+    'Origin',
+    'Cache-Control',
+    'X-File-Name'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  preflightContinue: false // preflight 요청을 여기서 완전히 처리
 }));
 
-// 개발 환경에서 모든 origin 허용 (테스트 목적)
+// CORS 에러 핸들러
+app.use((err, req, res, next) => {
+  if (err.message && err.message.includes('CORS policy')) {
+    console.error('🚫 CORS Error:', err.message);
+    return res.status(403).json({
+      error: 'CORS Error',
+      message: 'Origin not allowed by CORS policy',
+      origin: req.headers.origin,
+      allowedOrigins: allowedOrigins.slice(0, 3) // 보안상 일부만 노출
+    });
+  }
+  next(err);
+});
+
+// 개발 환경 추가 설정
 if (process.env.NODE_ENV !== 'production') {
-  app.options('*', cors());
+  console.log('🛠 Development mode: Additional CORS flexibility enabled');
 }
 
 // Rate limiting 최적화
@@ -98,16 +188,29 @@ app.use(express.urlencoded({
   parameterLimit: 1000 // 파라미터 개수 제한
 }));
 
-// 응답 시간 측정 미들웨어
+// 응답 시간 측정 미들웨어 (CORS 개선)
 app.use((req, res, next) => {
   const startTime = Date.now();
+  const origin = req.headers.origin;
   
   res.on('finish', () => {
     const duration = Date.now() - startTime;
-    console.log(`📊 ${req.method} ${req.url} - ${res.statusCode} - ${duration}ms`);
+    const corsInfo = origin ? ` [Origin: ${origin}]` : '';
+    
+    if (req.method === 'OPTIONS') {
+      console.log(`⚡ PREFLIGHT ${req.url} - ${res.statusCode} - ${duration}ms${corsInfo}`);
+    } else {
+      console.log(`📊 ${req.method} ${req.url} - ${res.statusCode} - ${duration}ms${corsInfo}`);
+    }
     
     // 성능 헤더 추가
     res.setHeader('X-Response-Time', `${duration}ms`);
+    
+    // CORS 관련 디버그 헤더 (개발 환경에서만)
+    if (process.env.NODE_ENV !== 'production' && origin) {
+      res.setHeader('X-CORS-Origin', origin);
+      res.setHeader('X-CORS-Allowed', 'true');
+    }
   });
   
   next();

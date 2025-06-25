@@ -106,6 +106,9 @@ const createApiInstance = (): AxiosInstance => {
         fullURL: `${config.baseURL}${config.url}`,
         timeout: config.timeout,
         keepAlive: config.headers['Connection'],
+        withCredentials: config.withCredentials,
+        origin: window.location.origin,
+        corsMode: 'cors',
         requestId
       });
       return config;
@@ -137,6 +140,12 @@ const createApiInstance = (): AxiosInstance => {
         size: response.headers['content-length'] || 'unknown',
         compression: response.headers['content-encoding'] || 'none',
         keepAlive: response.headers['connection'],
+        cors: {
+          allowOrigin: response.headers['access-control-allow-origin'],
+          allowCredentials: response.headers['access-control-allow-credentials'],
+          vary: response.headers['vary'],
+          corsProcessingTime: response.headers['x-cors-processing-time']
+        },
         data: response.data,
       });
       return response;
@@ -161,13 +170,24 @@ const createApiInstance = (): AxiosInstance => {
         data: error.response?.data,
       });
 
-      // 네트워크 에러 처리 개선
-      if (error.code === 'ECONNABORTED') {
+      // CORS 및 네트워크 에러 처리 개선
+      if (error.code === 'ERR_NETWORK' || (error.message === 'Network Error' && error.response?.status === undefined)) {
+        console.error('🚫 CORS Error detected:', {
+          origin: window.location.origin,
+          targetUrl: error.config?.url,
+          baseURL: error.config?.baseURL,
+          withCredentials: error.config?.withCredentials
+        });
+        error.message = `CORS Error: 도메인 ${window.location.origin}에서 API 서버 접근이 차단되었습니다.`;
+      } else if (error.code === 'ECONNABORTED') {
         error.message = `요청 시간 초과 (${duration}ms): 서버 응답이 지연되고 있습니다.`;
       } else if (error.message === 'Network Error') {
         error.message = '네트워크 오류: API 서버에 연결할 수 없습니다. 인터넷 연결을 확인해주세요.';
       } else if (error.response?.status === 0) {
         error.message = 'CORS error: API 서버와 연결할 수 없습니다.';
+      } else if (error.response?.status === 403 && error.response?.data?.error === 'CORS Error') {
+        console.error('🚫 CORS Policy Violation:', error.response.data);
+        error.message = `CORS 정책 위반: ${error.response.data.message} (Origin: ${error.response.data.origin})`;
       } else if (error.code === 'ECONNRESET') {
         error.message = '연결 재설정: 서버와의 연결이 끊어졌습니다.';
       } else if (error.code === 'ETIMEDOUT') {
