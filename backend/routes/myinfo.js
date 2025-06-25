@@ -39,9 +39,9 @@ router.get('/', async (req, res) => {
     const [userResult, personasResult, heartsResult, charactersResult] = await Promise.all([
       // 사용자 기본 정보 (필수 컬럼만)
       executeQuery(`
-        SELECT uid, displayName, email, createdAt
+        SELECT userId, displayName, email, createdAt
         FROM users 
-        WHERE uid = ? 
+        WHERE userId = ? 
         LIMIT 1
       `, [userId]),
       
@@ -76,8 +76,8 @@ router.get('/', async (req, res) => {
 
     // 사용자 정보 구성
     const user = userResult.length > 0 ? {
-      uid: userResult[0].uid,
-      userId: userResult[0].uid, // 호환성
+      uid: userResult[0].userId,
+      userId: userResult[0].userId, // 호환성
       name: userResult[0].displayName || "사용자",
       email: userResult[0].email,
       createdAt: userResult[0].createdAt
