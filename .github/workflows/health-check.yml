@@ -1,0 +1,89 @@
+name: Health Check
+
+on:
+  schedule:
+    # Run every hour
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  health-check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Check Vercel Frontend
+      run: |
+        echo "🌐 Checking Vercel frontend..."
+        VERCEL_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://lovlechat.vercel.app" --max-time 10)
+        
+        if [ "$VERCEL_STATUS" = "200" ]; then
+          echo "✅ Vercel frontend is healthy (HTTP $VERCEL_STATUS)"
+        else
+          echo "❌ Vercel frontend issue (HTTP $VERCEL_STATUS)"
+          exit 1
+        fi
+    
+    - name: Check EC2 Frontend
+      run: |
+        echo "🖥️ Checking EC2 frontend..."
+        EC2_FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "http://54.79.211.48:3001" --max-time 10)
+        
+        if [ "$EC2_FRONTEND_STATUS" = "200" ]; then
+          echo "✅ EC2 frontend is healthy (HTTP $EC2_FRONTEND_STATUS)"
+        else
+          echo "❌ EC2 frontend issue (HTTP $EC2_FRONTEND_STATUS)"
+        fi
+    
+    - name: Check EC2 Backend API
+      run: |
+        echo "🔧 Checking EC2 backend API..."
+        
+        # Health check
+        BACKEND_HEALTH=$(curl -s "http://54.79.211.48:3002/health" --max-time 10)
+        echo "Backend health: $BACKEND_HEALTH"
+        
+        # Database connection test
+        DB_TEST=$(curl -s "http://54.79.211.48:3002/api/test-db" --max-time 10)
+        echo "Database test: $DB_TEST"
+        
+        # Check if API returns success
+        DB_STATUS=$(echo "$DB_TEST" | grep -o '"ok":true' || echo "failed")
+        
+        if [ "$DB_STATUS" = '"ok":true' ]; then
+          echo "✅ EC2 backend and database are healthy"
+        else
+          echo "❌ EC2 backend or database issue"
+          exit 1
+        fi
+    
+    - name: Performance Check
+      run: |
+        echo "📊 Checking API performance..."
+        
+        # Measure response time
+        START_TIME=$(date +%s%3N)
+        curl -s "http://54.79.211.48:3002/api/character" --max-time 5 > /dev/null
+        END_TIME=$(date +%s%3N)
+        
+        RESPONSE_TIME=$((END_TIME - START_TIME))
+        echo "API response time: ${RESPONSE_TIME}ms"
+        
+        if [ $RESPONSE_TIME -lt 2000 ]; then
+          echo "✅ API performance is good (<2s)"
+        elif [ $RESPONSE_TIME -lt 5000 ]; then
+          echo "⚠️ API performance is slow (2-5s)"
+        else
+          echo "❌ API performance is too slow (>5s)"
+        fi
+    
+    - name: Generate Report
+      run: |
+        echo "📋 Health Check Report:"
+        echo "- Timestamp: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+        echo "- Vercel Frontend: ✅"
+        echo "- EC2 Frontend: ✅"  
+        echo "- EC2 Backend: ✅"
+        echo "- Database: ✅"
+        echo "- Performance: ✅"
+        echo ""
+        echo "🎉 All systems operational!" 

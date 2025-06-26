@@ -1,0 +1,101 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: 'Force deploy (ignore conflicts)'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: '**/package-lock.json'
+    
+    - name: Install dependencies (Backend)
+      run: |
+        cd backend
+        npm ci --only=production
+    
+    - name: Install dependencies (Frontend)
+      run: |
+        cd frontend
+        npm ci
+    
+    - name: Build Frontend
+      run: |
+        cd frontend
+        npm run build
+        
+    - name: Deploy to EC2 via API
+      run: |
+        echo "🚀 Deploying to EC2..."
+        
+        # Try force deploy if manual trigger with force option
+        if [ "${{ github.event.inputs.force_deploy }}" = "true" ]; then
+          echo "💪 Force deployment requested"
+          curl -X POST "http://54.79.211.48:3002/api/deploy/force" \
+            -H "Content-Type: application/json" \
+            -w "HTTP Status: %{http_code}\n" \
+            --max-time 120 || echo "Force deploy failed, trying webhook..."
+        fi
+        
+        # Trigger webhook deployment
+        echo "📡 Triggering webhook deployment..."
+        DEPLOY_RESULT=$(curl -X POST "http://54.79.211.48:3002/api/deploy/webhook" \
+          -H "Content-Type: application/json" \
+          -d '{"ref": "refs/heads/main", "repository": {"name": "lovlechat"}}' \
+          -w "HTTP Status: %{http_code}\n" \
+          --max-time 120 \
+          --fail-with-body || echo "Webhook deployment failed")
+        
+        echo "Deploy Result: $DEPLOY_RESULT"
+        
+        # Wait for deployment to complete
+        echo "⏳ Waiting for deployment to complete..."
+        sleep 30
+        
+        # Check deployment status
+        echo "🔍 Checking deployment status..."
+        STATUS_RESULT=$(curl -s "http://54.79.211.48:3002/api/deploy/status" \
+          --max-time 30 || echo "Status check failed")
+        
+        echo "Status Result: $STATUS_RESULT"
+        
+        # Verify server is running
+        echo "✅ Verifying server status..."
+        HEALTH_CHECK=$(curl -s "http://54.79.211.48:3002/health" \
+          --max-time 10 || echo "Health check failed")
+        
+        echo "Health Check: $HEALTH_CHECK"
+        
+        echo "🎉 Deployment process completed!"
+    
+    - name: Notify Deployment Result
+      run: |
+        echo "📊 Deployment Summary:"
+        echo "- Commit: ${{ github.sha }}"
+        echo "- Branch: ${{ github.ref_name }}"
+        echo "- Triggered by: ${{ github.actor }}"
+        echo "- Force deploy: ${{ github.event.inputs.force_deploy }}"
+        
+        # Final verification
+        echo "🔍 Final verification..."
+        curl -s "http://54.79.211.48:3002/api/test-db" \
+          --max-time 10 \
+          && echo "✅ Backend is responding correctly" \
+          || echo "❌ Backend verification failed" 

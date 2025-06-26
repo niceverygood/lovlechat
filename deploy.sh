@@ -33,13 +33,7 @@ echo "========================================"
 # 1. 최신 코드 가져오기
 git pull origin main
 
-# 2. 프론트엔드 빌드
-echo -e "\n${YELLOW}📦 1. 프론트엔드 빌드 중...${NC}"
-cd $FRONTEND_DIR || { echo -e "${RED}❌ 프론트엔드 디렉토리를 찾을 수 없습니다${NC}"; exit 1; }
-npm install || true
-npm run build || { echo -e "${RED}❌ 프론트엔드 빌드 실패${NC}"; exit 1; }
-cd ..
-echo -e "${GREEN}✅ 프론트엔드 빌드 완료${NC}"
+
 
 # 3. 백엔드 의존성 설치
 echo -e "\n${YELLOW}📦 2. 백엔드 의존성 설치 중...${NC}"
