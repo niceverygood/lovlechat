@@ -8,13 +8,13 @@ interface Props {
 }
 
 export default function ProtectedRoute({ children }: Props) {
-  const { user, loading, authReady } = useAuth();
+  const { user, loading, authReady, isGuest } = useAuth();
 
   if (!authReady || loading) {
     return <div>로딩 중...</div>;
   }
-  if (!user) {
-    return <Navigate to="/" replace />;
+  if (user || isGuest) {
+    return <>{children}</>;
   }
-  return <>{children}</>;
+  return <Navigate to="/intro" replace />;
 }

@@ -20,62 +20,61 @@ const ProfileDetailPage = lazy(() => import('./pages/ProfileDetailPage'));
 const ChatPage = lazy(() => import('./pages/ChatPage'));
 const MonitoringDashboard = lazy(() => import('./pages/MonitoringDashboard'));
 
-// Enhanced Loading component with better styling
-const PageLoading = ({ message = '로딩 중...' }: { message?: string }) => (
-  <div style={{
-    position: 'fixed',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#1a1a1a', // 명시적인 배경색
-    color: '#ffffff',
-    fontSize: '18px',
-    fontWeight: 600,
-    zIndex: 9999
-  }}>
+// Enhanced Loading Screen Component
+const LoadingScreen: React.FC<{ message?: string }> = ({ message = "로딩 중..." }) => {
+  return (
     <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
       display: 'flex',
-      flexDirection: 'column',
+      justifyContent: 'center',
       alignItems: 'center',
-      gap: '24px',
-      padding: '32px',
-      backgroundColor: '#2a2a2a',
-      borderRadius: '16px',
-      boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)'
+      backgroundColor: '#1a1a1a',
+      color: '#ffffff',
+      fontSize: '18px',
+      fontWeight: 600,
+      zIndex: 9999
     }}>
       <div style={{
-        width: '48px',
-        height: '48px',
-        border: '4px solid #333333',
-        borderTop: '4px solid #ff4081',
-        borderRadius: '50%',
-        animation: 'spin 1s linear infinite'
-      }} />
-      <div style={{ textAlign: 'center', lineHeight: '1.4' }}>
-        {message}
-      </div>
-      <div style={{ 
-        fontSize: '14px', 
-        color: '#b0b0b0', 
-        textAlign: 'center',
-        maxWidth: '280px'
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '24px',
+        padding: '32px',
+        backgroundColor: '#2a2a2a',
+        borderRadius: '16px',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)'
       }}>
-        Firebase 초기화 중입니다...<br />
-        잠시만 기다려주세요.
+        <div style={{
+          width: '48px',
+          height: '48px',
+          border: '4px solid #333333',
+          borderTop: '4px solid #ff4081',
+          borderRadius: '50%',
+          animation: 'spin 1s linear infinite'
+        }}></div>
+        <div style={{ textAlign: 'center', lineHeight: '1.4' }}>
+          {message}
+        </div>
+        <div style={{
+          fontSize: '14px',
+          color: '#b0b0b0',
+          textAlign: 'center',
+          maxWidth: '280px'
+        }}>
+          Firebase 초기화 중입니다...<br />
+          잠시만 기다려주세요.
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
-// Error Boundary for lazy components
-class LazyErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { hasError: boolean }
-> {
+// Error Boundary for Lazy Loading
+class LazyLoadErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
   constructor(props: { children: React.ReactNode }) {
     super(props);
     this.state = { hasError: false };
@@ -118,7 +117,7 @@ class LazyErrorBoundary extends React.Component<
             textAlign: 'center'
           }}>
             <div>⚠️ 페이지 로딩 중 오류가 발생했습니다</div>
-            <button 
+            <button
               onClick={() => window.location.reload()}
               style={{
                 background: '#ff4081',
@@ -142,16 +141,17 @@ class LazyErrorBoundary extends React.Component<
   }
 }
 
-// Wrapper component for lazy loaded pages
-const LazyPageWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <LazyErrorBoundary>
-    <Suspense fallback={<PageLoading />}>
-      {children}
-    </Suspense>
-  </LazyErrorBoundary>
-);
+const SuspenseWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  return (
+    <LazyLoadErrorBoundary>
+      <Suspense fallback={<LoadingScreen />}>
+        {children}
+      </Suspense>
+    </LazyLoadErrorBoundary>
+  );
+};
 
-function App() {
+const App: React.FC = () => {
   const { user, loading, authReady, error, isGuest } = useAuth();
   const { ToastContainer, warning, error: showError, success } = useToast();
 
@@ -172,171 +172,45 @@ function App() {
       const timer = setTimeout(() => {
         success('Guest 모드로 앱을 사용할 수 있습니다. 로그인하시면 더 많은 기능을 이용하실 수 있습니다.', 8000);
       }, 1000);
-      
       return () => clearTimeout(timer);
     }
   }, [isGuest, authReady, success]);
 
-  // 초기 로딩 중
-  if (!authReady) {
+  // 인증 상태가 아직 준비되지 않았거나 로딩 중인 경우에만 로딩 화면 표시
+  if (!authReady && loading) {
     return (
       <>
-        <PageLoading message="앱 초기화 중..." />
+        <LoadingScreen message="인증 확인 중..." />
         <ToastContainer />
       </>
     );
   }
 
-  // Auth 처리 중
-  if (loading) {
-    return (
-      <>
-        <PageLoading message="인증 확인 중..." />
-        <ToastContainer />
-      </>
-    );
-  }
-
+  // 인증 준비 완료 후 앱 렌더링 (사용자 로그인 여부와 관계없이)
   return (
     <>
       <Router>
         <div className="App">
           <Routes>
-            {/* Public Routes */}
-            <Route 
-              path="/intro" 
-              element={
-                <LazyPageWrapper>
-                  <IntroPage />
-                </LazyPageWrapper>
-              } 
-            />
-            <Route 
-              path="/login" 
-              element={
-                <LazyPageWrapper>
-                  <LoginPage />
-                </LazyPageWrapper>
-              } 
-            />
-
-            {/* Protected Routes */}
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <LazyPageWrapper>
-                    <HomePage />
-                  </LazyPageWrapper>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/for-you"
-              element={
-                <ProtectedRoute>
-                  <LazyPageWrapper>
-                    <ForYouPage />
-                  </LazyPageWrapper>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/my"
-              element={
-                <ProtectedRoute>
-                  <LazyPageWrapper>
-                    <MyPageOptimized />
-                  </LazyPageWrapper>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/my-original"
-              element={
-                <ProtectedRoute>
-                  <LazyPageWrapper>
-                    <MyPage />
-                  </LazyPageWrapper>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/heart-shop"
-              element={
-                <ProtectedRoute>
-                  <LazyPageWrapper>
-                    <HeartShopPage />
-                  </LazyPageWrapper>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/character/:id"
-              element={
-                <ProtectedRoute>
-                  <LazyPageWrapper>
-                    <CharacterDetailPage />
-                  </LazyPageWrapper>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/character-create"
-              element={
-                <ProtectedRoute>
-                  <LazyPageWrapper>
-                    <CharacterCreatePage />
-                  </LazyPageWrapper>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/profile/:id"
-              element={
-                <ProtectedRoute>
-                  <LazyPageWrapper>
-                    <ProfileDetailPage />
-                  </LazyPageWrapper>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/chat/:personaId/:characterId"
-              element={
-                <ProtectedRoute>
-                  <LazyPageWrapper>
-                    <ChatPage />
-                  </LazyPageWrapper>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/monitoring"
-              element={
-                <ProtectedRoute>
-                  <LazyPageWrapper>
-                    <MonitoringDashboard />
-                  </LazyPageWrapper>
-                </ProtectedRoute>
-              }
-            />
-
-            {/* Redirect root to intro for non-authenticated users */}
-            <Route
-              path="*"
-              element={
-                user ? <Navigate to="/" replace /> : <Navigate to="/intro" replace />
-              }
-            />
+            <Route path="/intro" element={<SuspenseWrapper><IntroPage /></SuspenseWrapper>} />
+            <Route path="/login" element={<SuspenseWrapper><LoginPage /></SuspenseWrapper>} />
+            <Route path="/" element={<ProtectedRoute><SuspenseWrapper><HomePage /></SuspenseWrapper></ProtectedRoute>} />
+            <Route path="/for-you" element={<ProtectedRoute><SuspenseWrapper><ForYouPage /></SuspenseWrapper></ProtectedRoute>} />
+            <Route path="/my" element={<ProtectedRoute><SuspenseWrapper><MyPageOptimized /></SuspenseWrapper></ProtectedRoute>} />
+            <Route path="/my-original" element={<ProtectedRoute><SuspenseWrapper><MyPage /></SuspenseWrapper></ProtectedRoute>} />
+            <Route path="/heart-shop" element={<ProtectedRoute><SuspenseWrapper><HeartShopPage /></SuspenseWrapper></ProtectedRoute>} />
+            <Route path="/character/:id" element={<ProtectedRoute><SuspenseWrapper><CharacterDetailPage /></SuspenseWrapper></ProtectedRoute>} />
+            <Route path="/character-create" element={<ProtectedRoute><SuspenseWrapper><CharacterCreatePage /></SuspenseWrapper></ProtectedRoute>} />
+            <Route path="/profile/:id" element={<ProtectedRoute><SuspenseWrapper><ProfileDetailPage /></SuspenseWrapper></ProtectedRoute>} />
+            <Route path="/chat/:personaId/:characterId" element={<ProtectedRoute><SuspenseWrapper><ChatPage /></SuspenseWrapper></ProtectedRoute>} />
+            <Route path="/monitoring" element={<ProtectedRoute><SuspenseWrapper><MonitoringDashboard /></SuspenseWrapper></ProtectedRoute>} />
+            <Route path="*" element={user ? <Navigate to="/" replace /> : <Navigate to="/intro" replace />} />
           </Routes>
         </div>
       </Router>
-      
-      {/* Toast Container */}
       <ToastContainer />
     </>
   );
-}
+};
 
 export default App;
