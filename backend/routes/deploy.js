@@ -109,6 +109,45 @@ router.post('/manual', (req, res) => {
   });
 });
 
+// POST /api/deploy/force - 강제 배포 (충돌 무시)
+router.post('/force', (req, res) => {
+  console.log('💪 Force deploy triggered - ignoring conflicts');
+  
+  const forceDeployScript = `
+    cd /home/ec2-user/lovlechat-backend && \
+    git reset --hard HEAD && \
+    git clean -fd && \
+    git pull origin main && \
+    npm install --production && \
+    pm2 restart lovlechat-backend || pm2 start index.js --name lovlechat-backend && \
+    echo "Backend deployed successfully"
+  `;
+  
+  exec(forceDeployScript, (error, stdout, stderr) => {
+    if (error) {
+      console.error('❌ Force deploy error:', error);
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Force deploy failed', 
+        details: error.message,
+        stderr: stderr
+      });
+    }
+    
+    console.log('✅ Force deploy completed');
+    console.log('STDOUT:', stdout);
+    if (stderr) console.log('STDERR:', stderr);
+    
+    res.json({ 
+      success: true, 
+      message: 'Force deploy completed successfully',
+      timestamp: new Date().toISOString(),
+      output: stdout,
+      stderr: stderr
+    });
+  });
+});
+
 // GET /api/deploy/status - 배포 상태 확인
 router.get('/status', (req, res) => {
   exec('pm2 jlist', (error, stdout, stderr) => {
