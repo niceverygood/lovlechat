@@ -10,25 +10,50 @@ npm install
 ```
 
 ### 2. 환경변수 설정
-`.env` 파일을 생성하고 아래 내용을 추가하세요:
 
-```env
-# Database Configuration
+#### Production Environment Variables
+
+Create a `.env.production` file in the backend directory with the following content:
+
+```bash
 DB_HOST=lovlechat-db.cf48aygyuqv7.ap-southeast-2.rds.amazonaws.com
-DB_PORT=3306
 DB_USER=admin
 DB_PASSWORD=Lovle123!
 DB_NAME=lovlechat
-
-# OpenAI Configuration
-
-# Server Configuration
-PORT=5000
-NODE_ENV=development
-
-# CORS Configuration
-FRONTEND_URL=http://localhost:3000
+DB_PORT=3306
+NODE_ENV=production
+PORT=3002
+FRONTEND_URL=https://lovlechat.vercel.app
+OPENAI_API_KEY=your_openai_api_key_here
 ```
+
+#### Development Environment Variables
+
+Create a `.env` file in the backend directory with your local settings:
+
+```bash
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=your_local_password
+DB_NAME=lovlechat
+DB_PORT=3306
+NODE_ENV=development
+PORT=3002
+FRONTEND_URL=http://localhost:3000
+OPENAI_API_KEY=your_openai_api_key_here
+```
+
+## Database Connection
+
+The application will automatically load the appropriate environment file based on the NODE_ENV setting:
+- Production: `.env.production`
+- Development: `.env`
+
+## Security Notes
+
+- Never commit `.env` or `.env.production` files to version control
+- Environment files are listed in `.gitignore` for security
+- Use the example files as templates
 
 ### 3. 서버 실행
 
