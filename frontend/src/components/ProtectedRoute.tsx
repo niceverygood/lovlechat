@@ -8,9 +8,9 @@ interface Props {
 }
 
 export default function ProtectedRoute({ children }: Props) {
-  const { user, loading } = useAuth();
+  const { user, loading, authReady } = useAuth();
 
-  if (loading) {
+  if (!authReady || loading) {
     return <div>로딩 중...</div>;
   }
   if (!user) {
