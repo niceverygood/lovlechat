@@ -9,7 +9,7 @@ import ProfileDetailModal from "../components/ProfileDetailModal";
 import FavorDetailModal from "../components/FavorDetailModal";
 import FavorBubble from "../components/FavorBubble";
 import CustomAlert from "../components/CustomAlert";
-import Toast from "../components/Toast";
+import { useToast } from "../components/Toast";
 import ChatInput from "../components/ChatInput";
 import LoginPromptModal from "../components/LoginPromptModal";
 import { apiGet, apiPost } from '../lib/api';
@@ -53,6 +53,7 @@ export default function ChatPage() {
   const personaId = params.get("persona");
   const { user } = useAuth();
   const { hearts, loading: heartsLoading, error: heartsError, refreshHearts, useHearts: useHeartsFunction } = useHearts(user?.uid || null);
+  const { success, error: showError, ToastContainer } = useToast();
   const [persona, setPersona] = useState<{
     name: string;
     avatar: string;
@@ -93,7 +94,6 @@ export default function ChatPage() {
   const [showFavorModal, setShowFavorModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
-  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const favorRef = useRef(favor);
   const [showNotice, setShowNotice] = useState(true);
   const [showMoreModal, setShowMoreModal] = useState(false);
@@ -234,15 +234,9 @@ export default function ChatPage() {
         // 기존 토스트 메시지도 유지 (선택사항)
         if (character && persona) {
           if (change > 0) {
-            setToast({
-              message: `축하합니다! ${character.name}${getPostposition(character.name)} ${persona.name}님의 호감도가 ${change}만큼 증가했습니다! (${current}점)`,
-              type: "success"
-            });
+            success(`축하합니다! ${character.name}${getPostposition(character.name)} ${persona.name}님의 호감도가 ${change}만큼 증가했습니다! (${current}점)`);
           } else if (change < 0) {
-            setToast({
-              message: `아쉬워요 ㅠ ${character.name}${getPostposition(character.name)} ${persona.name}님의 호감도가 ${Math.abs(change)}만큼 감소했습니다... (${current}점)`,
-              type: "error"
-            });
+            showError(`아쉬워요 ㅠ ${character.name}${getPostposition(character.name)} ${persona.name}님의 호감도가 ${Math.abs(change)}만큼 감소했습니다... (${current}점)`);
           }
         }
       }
@@ -263,12 +257,9 @@ export default function ChatPage() {
   // 하트 에러 처리
   useEffect(() => {
     if (heartsError) {
-      setToast({
-        message: heartsError,
-        type: "error"
-      });
+      showError(heartsError);
     }
-  }, [heartsError]);
+  }, [heartsError, showError]);
 
   // 게스트 모드에서 메시지 수 추적
   useEffect(() => {
@@ -392,10 +383,7 @@ export default function ChatPage() {
       }
     } catch (error) {
       console.error('채팅방 나가기 오류:', error);
-      setToast({
-        message: '채팅방 나가기에 실패했습니다. 다시 시도해주세요.',
-        type: 'error'
-      });
+      showError('채팅방 나가기에 실패했습니다. 다시 시도해주세요.');
     }
   };
 
@@ -1000,7 +988,7 @@ export default function ChatPage() {
         </div>
       )}
 
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <ToastContainer />
     </div>
   );
 }

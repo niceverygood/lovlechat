@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import DefaultProfileImage from "../components/DefaultProfileImage";
-import Toast from "../components/Toast";
+import { useToast } from "../components/Toast";
 import { useAuth } from "../hooks/useAuth";
 import { apiPost } from '../lib/api';
 import { DEFAULT_PROFILE_IMAGE } from '../utils/constants';
@@ -17,6 +17,7 @@ const categories = [
 export default function CharacterCreatePage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { success, error: showError, ToastContainer } = useToast();
   const [gender, setGender] = useState("설정하지 않음");
   const [scope, setScope] = useState("공개");
   const [roomCode, setRoomCode] = useState("");
@@ -38,7 +39,6 @@ export default function CharacterCreatePage() {
   const [firstMessage, setFirstMessage] = useState("");
   const [backgroundImg, setBackgroundImg] = useState<string | null>(null);
   const backgroundImgInputRef = useRef<HTMLInputElement>(null);
-  const [toast, setToast] = useState<{ message: string; type?: "success" | "error" } | null>(null);
   const [loading, setLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState<{ id: string } | null>(null);
 
@@ -86,47 +86,47 @@ export default function CharacterCreatePage() {
 
   const handleSubmit = async () => {
     if (!profileImg) {
-      setToast({ message: "프로필 사진을 추가해주세요.", type: "error" });
+      showError("프로필 사진을 추가해주세요.");
       return;
     }
     if (!name.trim()) {
-      setToast({ message: "캐릭터 이름을 입력해주세요.", type: "error" });
+      showError("캐릭터 이름을 입력해주세요.");
       return;
     }
     if (name.trim().length < 2) {
-      setToast({ message: "캐릭터 이름은 2글자 이상이어야 합니다.", type: "error" });
+      showError("캐릭터 이름은 2글자 이상이어야 합니다.");
       return;
     }
     if (!age || parseInt(age) < 1 || parseInt(age) > 150) {
-      setToast({ message: "나이를 올바르게 입력해주세요. (1-150세)", type: "error" });
+      showError("나이를 올바르게 입력해주세요. (1-150세)");
       return;
     }
     if (!job.trim()) {
-      setToast({ message: "직업을 입력해주세요.", type: "error" });
+      showError("직업을 입력해주세요.");
       return;
     }
     if (!oneLiner.trim()) {
-      setToast({ message: "캐릭터 한 마디를 입력해주세요.", type: "error" });
+      showError("캐릭터 한 마디를 입력해주세요.");
       return;
     }
     if (!background.trim()) {
-      setToast({ message: "캐릭터 배경을 입력해주세요.", type: "error" });
+      showError("캐릭터 배경을 입력해주세요.");
       return;
     }
     if (!personality.trim()) {
-      setToast({ message: "성격을 입력해주세요.", type: "error" });
+      showError("성격을 입력해주세요.");
       return;
     }
     if (!firstScene.trim()) {
-      setToast({ message: "첫 상황을 입력해주세요.", type: "error" });
+      showError("첫 상황을 입력해주세요.");
       return;
     }
     if (!firstMessage.trim()) {
-      setToast({ message: "채팅 첫 마디를 입력해주세요.", type: "error" });
+      showError("채팅 첫 마디를 입력해주세요.");
       return;
     }
     if (!category) {
-      setToast({ message: "카테고리를 선택해주세요.", type: "error" });
+      showError("카테고리를 선택해주세요.");
       return;
     }
     
@@ -173,14 +173,11 @@ export default function CharacterCreatePage() {
       
       if (data.ok && data.id) {
         if (data.message) {
-          setToast({ message: data.message, type: "success" });
+          success(data.message);
         }
         
         if (data.fallback) {
-          setToast({ 
-            message: "캐릭터가 임시 저장되었습니다. 잠시 후 다시 확인해주세요.", 
-            type: "success" 
-          });
+          success("캐릭터가 임시 저장되었습니다. 잠시 후 다시 확인해주세요.");
         }
         
         setShowSuccessModal({ id: data.id.toString() });
@@ -194,7 +191,7 @@ export default function CharacterCreatePage() {
         ? "서버 연결에 문제가 있습니다. 잠시 후 다시 시도해주세요."
         : error.message || "캐릭터 저장 중 오류가 발생했습니다.";
         
-      setToast({ message: errorMessage, type: "error" });
+      showError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -486,9 +483,7 @@ export default function CharacterCreatePage() {
           </div>
         </div>
       )}
-      {toast && (
-        <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
-      )}
+      <ToastContainer />
     </div>
   );
 } 

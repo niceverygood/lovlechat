@@ -1,53 +1,74 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+
+export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
 interface ToastProps {
   message: string;
-  type?: 'success' | 'error' | 'warning' | 'info';
+  type: ToastType;
   duration?: number;
-  onClose?: () => void;
-  show?: boolean;
+  onClose: () => void;
 }
 
-export const Toast: React.FC<ToastProps> = ({ 
-  message, 
-  type = 'info', 
-  duration = 4000, 
-  onClose, 
-  show = true 
-}) => {
-  const [visible, setVisible] = useState(show);
+const Toast: React.FC<ToastProps> = ({ message, type, duration = 4000, onClose }) => {
+  const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    setVisible(show);
-  }, [show]);
+    // Trigger animation
+    const showTimer = setTimeout(() => setIsVisible(true), 10);
+    
+    // Auto close
+    const closeTimer = setTimeout(() => {
+      setIsVisible(false);
+      setTimeout(onClose, 300); // Wait for animation
+    }, duration);
 
-  useEffect(() => {
-    if (visible && duration > 0) {
-      const timer = setTimeout(() => {
-        setVisible(false);
-        onClose?.();
-      }, duration);
+    return () => {
+      clearTimeout(showTimer);
+      clearTimeout(closeTimer);
+    };
+  }, [duration, onClose]);
 
-      return () => clearTimeout(timer);
-    }
-  }, [visible, duration, onClose]);
-
-  if (!visible) return null;
-
-  const getTypeStyles = () => {
+  const getIcon = () => {
     switch (type) {
-      case 'success':
-        return { backgroundColor: '#4caf50', icon: '✅' };
-      case 'error':
-        return { backgroundColor: '#f44336', icon: '❌' };
-      case 'warning':
-        return { backgroundColor: '#ff9800', icon: '⚠️' };
-      default:
-        return { backgroundColor: '#2196f3', icon: 'ℹ️' };
+      case 'success': return '✅';
+      case 'error': return '❌';
+      case 'warning': return '⚠️';
+      case 'info': return 'ℹ️';
+      default: return 'ℹ️';
     }
   };
 
-  const typeStyles = getTypeStyles();
+  const getColors = () => {
+    switch (type) {
+      case 'success': 
+        return { 
+          bg: '#4caf50', 
+          border: '#66bb6a',
+          shadow: 'rgba(76, 175, 80, 0.3)'
+        };
+      case 'error': 
+        return { 
+          bg: '#f44336', 
+          border: '#ef5350',
+          shadow: 'rgba(244, 67, 54, 0.3)'
+        };
+      case 'warning': 
+        return { 
+          bg: '#ff9800', 
+          border: '#ffb74d',
+          shadow: 'rgba(255, 152, 0, 0.3)'
+        };
+      case 'info':
+      default: 
+        return { 
+          bg: '#2196f3', 
+          border: '#42a5f5',
+          shadow: 'rgba(33, 150, 243, 0.3)'
+        };
+    }
+  };
+
+  const colors = getColors();
 
   return (
     <div
@@ -55,83 +76,81 @@ export const Toast: React.FC<ToastProps> = ({
         position: 'fixed',
         top: '20px',
         right: '20px',
-        zIndex: 10000,
+        background: colors.bg,
+        color: '#ffffff',
         padding: '16px 20px',
         borderRadius: '12px',
-        color: '#fff',
-        fontWeight: '500',
-        fontSize: '14px',
-        maxWidth: '400px',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+        border: `1px solid ${colors.border}`,
+        boxShadow: `0 8px 32px ${colors.shadow}`,
         display: 'flex',
         alignItems: 'center',
         gap: '12px',
-        animation: 'slideInRight 0.3s ease-out',
-        ...typeStyles,
+        maxWidth: '400px',
+        minWidth: '280px',
+        fontSize: '14px',
+        fontWeight: 500,
+        zIndex: 10000,
+        transform: isVisible ? 'translateX(0)' : 'translateX(100%)',
+        opacity: isVisible ? 1 : 0,
+        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        cursor: 'pointer'
+      }}
+      onClick={() => {
+        setIsVisible(false);
+        setTimeout(onClose, 300);
       }}
     >
-      <span style={{ fontSize: '16px' }}>{typeStyles.icon}</span>
-      <span style={{ flex: 1 }}>{message}</span>
+      <span style={{ fontSize: '16px' }}>{getIcon()}</span>
+      <span style={{ flex: 1, lineHeight: '1.4' }}>{message}</span>
       <button
-        onClick={() => {
-          setVisible(false);
-          onClose?.();
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsVisible(false);
+          setTimeout(onClose, 300);
         }}
         style={{
-          background: 'none',
+          background: 'rgba(255, 255, 255, 0.2)',
           border: 'none',
-          color: '#fff',
+          borderRadius: '6px',
+          color: '#ffffff',
           cursor: 'pointer',
-          fontSize: '18px',
-          padding: '0 4px',
-          opacity: 0.8,
+          fontSize: '12px',
+          padding: '4px 8px',
+          fontWeight: 600
         }}
       >
         ×
       </button>
-      
-      <style>{`
-        @keyframes slideInRight {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
-          }
-          to {
-            transform: translateX(0);
-            opacity: 1;
-          }
-        }
-      `}</style>
     </div>
   );
 };
 
-// Hook for using Toast
-export const useToast = () => {
-  const [toasts, setToasts] = useState<Array<{
-    id: string;
-    message: string;
-    type: 'success' | 'error' | 'warning' | 'info';
-    duration?: number;
-  }>>([]);
+// Toast Container Component
+interface ToastMessage {
+  id: string;
+  message: string;
+  type: ToastType;
+  duration?: number;
+}
 
-  const showToast = (
-    message: string, 
-    type: 'success' | 'error' | 'warning' | 'info' = 'info',
-    duration?: number
-  ) => {
-    const id = `toast-${Date.now()}-${Math.random()}`;
-    setToasts(prev => [...prev, { id, message, type, duration }]);
-  };
+interface ToastContainerProps {
+  toasts: ToastMessage[];
+  removeToast: (id: string) => void;
+}
 
-  const removeToast = (id: string) => {
-    setToasts(prev => prev.filter(toast => toast.id !== id));
-  };
-
-  const ToastContainer = () => (
-    <div style={{ position: 'fixed', top: 0, right: 0, zIndex: 10000 }}>
+export const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, removeToast }) => {
+  return (
+    <>
       {toasts.map((toast, index) => (
-        <div key={toast.id} style={{ marginTop: index > 0 ? '8px' : '20px', marginRight: '20px' }}>
+        <div
+          key={toast.id}
+          style={{
+            position: 'fixed',
+            top: `${20 + index * 80}px`,
+            right: '20px',
+            zIndex: 10000 - index
+          }}
+        >
           <Toast
             message={toast.message}
             type={toast.type}
@@ -140,16 +159,39 @@ export const useToast = () => {
           />
         </div>
       ))}
-    </div>
+    </>
   );
+};
+
+// Toast Hook
+export const useToast = () => {
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const addToast = (message: string, type: ToastType = 'info', duration?: number) => {
+    const id = Date.now().toString();
+    const newToast: ToastMessage = { id, message, type, duration };
+    
+    setToasts(prev => [...prev, newToast]);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  };
+
+  const success = (message: string, duration?: number) => addToast(message, 'success', duration);
+  const error = (message: string, duration?: number) => addToast(message, 'error', duration);
+  const warning = (message: string, duration?: number) => addToast(message, 'warning', duration);
+  const info = (message: string, duration?: number) => addToast(message, 'info', duration);
 
   return {
-    showToast,
-    ToastContainer,
-    success: (message: string, duration?: number) => showToast(message, 'success', duration),
-    error: (message: string, duration?: number) => showToast(message, 'error', duration),
-    warning: (message: string, duration?: number) => showToast(message, 'warning', duration),
-    info: (message: string, duration?: number) => showToast(message, 'info', duration),
+    toasts,
+    addToast,
+    removeToast,
+    success,
+    error,
+    warning,
+    info,
+    ToastContainer: () => <ToastContainer toasts={toasts} removeToast={removeToast} />
   };
 };
 
