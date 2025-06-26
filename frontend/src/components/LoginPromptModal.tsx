@@ -24,6 +24,10 @@ export default function LoginPromptModal({ isOpen, onClose, message }: LoginProm
     } catch (e) {
       console.error('로그인 실패:', e);
       setIsLogging(false);
+      
+      // 사용자에게 친화적인 에러 메시지 표시
+      const errorMessage = e instanceof Error ? e.message : '로그인 중 문제가 발생했습니다.';
+      alert(`로그인 실패: ${errorMessage}\n\n잠시 후 다시 시도해주세요.`);
     }
   };
 

@@ -79,6 +79,8 @@ const allowedOrigins = [
   'http://localhost:3000', // 로컬 개발
   'http://localhost:3001', // 로컬 serve
   'http://54.79.211.48:3001', // EC2 frontend
+  'http://54.79.211.48', // EC2 Nginx (포트 80)
+  'http://54.79.211.48:80', // EC2 Nginx 명시적
   process.env.FRONTEND_URL // 환경변수로 지정된 도메인
 ].filter(Boolean); // undefined 제거
 

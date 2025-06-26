@@ -29,6 +29,12 @@ const getApiBaseUrl = (): string => {
     return process.env.REACT_APP_API_BASE_URL;
   }
   
+  // EC2 환경 감지 (IP 주소로 접근하는 경우)
+  if (window.location.hostname.includes('54.79.211.48')) {
+    console.log('🚀 EC2 환경 감지 - 백엔드 포트 3002로 연결');
+    return 'http://54.79.211.48:3002';
+  }
+  
   // 프로덕션 환경 - Vercel 프록시 사용 (상대 경로)
   if (process.env.NODE_ENV === 'production') {
     console.log('✅ 프로덕션 환경 - 상대 경로 사용');

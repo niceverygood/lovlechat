@@ -17,14 +17,14 @@ export function useAuth() {
       try {
         console.log('🔐 Firebase Auth 초기화 시작...');
         
-        // 10초 timeout 설정
+        // 15초 timeout 설정 (더 여유있게)
         timeoutId = setTimeout(() => {
           console.warn('⚠️ Firebase Auth 초기화 시간 초과 - Guest 모드로 진행');
           setUser(null);
           setLoading(false);
           setAuthReady(true);
           setError('Firebase 연결 시간이 초과되었습니다. Guest 모드로 진행합니다.');
-        }, 10000);
+        }, 15000);
 
         unsubscribe = await onAuthStateChanged((u: User | null) => {
           clearTimeout(timeoutId);
