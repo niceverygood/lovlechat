@@ -6,6 +6,7 @@ import { onAuthStateChanged } from "../firebase";
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -21,6 +22,7 @@ export function useAuth() {
           console.warn('⚠️ Firebase Auth 초기화 시간 초과 - Guest 모드로 진행');
           setUser(null);
           setLoading(false);
+          setAuthReady(true);
           setError('Firebase 연결 시간이 초과되었습니다. Guest 모드로 진행합니다.');
         }, 10000);
 
@@ -29,6 +31,7 @@ export function useAuth() {
           console.log('✅ Firebase Auth 상태 변경:', u ? '로그인됨' : '로그아웃됨');
           setUser(u);
           setLoading(false);
+          setAuthReady(true);
           setError(null);
         });
 
@@ -40,6 +43,7 @@ export function useAuth() {
         // Firebase 에러여도 앱은 계속 실행 (Guest 모드)
         setUser(null);
         setLoading(false);
+        setAuthReady(true);
         setError(error instanceof Error ? error.message : 'Firebase 인증 초기화 실패');
         
         // 에러가 발생해도 사용자에게는 간단한 메시지만 표시
@@ -59,5 +63,5 @@ export function useAuth() {
     };
   }, []);
 
-  return { user, loading, error };
+  return { user, loading, authReady, error };
 }

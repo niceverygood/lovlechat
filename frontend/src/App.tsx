@@ -116,9 +116,9 @@ const LazyPageWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) 
 );
 
 function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, authReady } = useAuth();
 
-  if (loading) {
+  if (!authReady || loading) {
     return <PageLoading />;
   }
 

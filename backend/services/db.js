@@ -2,11 +2,11 @@ const mysql = require('mysql2/promise');
 
 // DB 설정
 const DB_CONFIG = {
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '3306'),
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '1234',
-  database: process.env.DB_NAME || 'lovlechat',
+  host: process.env.DB_HOST ?? 'localhost',
+  port: parseInt(process.env.DB_PORT ?? '3306'),
+  user: process.env.DB_USER ?? 'root',
+  password: process.env.DB_PASSWORD ?? '1234',
+  database: process.env.DB_NAME ?? 'lovlechat',
   charset: 'utf8mb4',
   connectionLimit: 20,
   waitForConnections: true,
