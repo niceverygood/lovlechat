@@ -79,9 +79,9 @@ router.post('/manual', (req, res) => {
   console.log('🚀 Manual deploy triggered');
   
   const deployScript = `
-    cd /home/ubuntu/lovlechat && \
+    cd /home/ec2-user/lovlechat-backend && \
+    git stash && \
     git pull origin main && \
-    cd backend && \
     npm install --production && \
     pm2 restart lovlechat-backend || pm2 start index.js --name lovlechat-backend
   `;
