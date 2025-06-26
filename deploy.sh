@@ -58,12 +58,7 @@ tar --exclude='node_modules' --exclude='.next' --exclude='*.log' --exclude='.git
     -czf backend.tar.gz -C $BACKEND_DIR . || { echo -e "${RED}❌ 백엔드 압축 실패${NC}"; exit 1; }
 echo -e "${GREEN}✅ 백엔드 압축 완료 (backend.tar.gz)${NC}"
 
-# 6. EC2에 프론트엔드 전송
-echo -e "\n${YELLOW}🚀 4. 프론트엔드 EC2로 전송 중...${NC}"
-ssh -i $SSH_KEY $EC2_USER@$EC2_IP "sudo rm -rf $EC2_FRONTEND_PATH/* || true" || true
-scp -i $SSH_KEY -r $FRONTEND_DIR/build/* $EC2_USER@$EC2_IP:/tmp/frontend-build/ || { echo -e "${RED}❌ 프론트엔드 전송 실패${NC}"; exit 1; }
-ssh -i $SSH_KEY $EC2_USER@$EC2_IP "sudo mv /tmp/frontend-build/* $EC2_FRONTEND_PATH/ && sudo chown -R www-data:www-data $EC2_FRONTEND_PATH" || true
-echo -e "${GREEN}✅ 프론트엔드 전송 완료${NC}"
+echo -e "\n${GREEN}✅ 프론트는 Vercel에서 배포되므로 EC2 빌드 스킵${NC}"
 
 # 7. EC2에 백엔드 전송
 echo -e "\n${YELLOW}🚀 5. 백엔드 EC2로 전송 중...${NC}"
