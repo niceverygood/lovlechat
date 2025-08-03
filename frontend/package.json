@@ -19,6 +19,7 @@
   "scripts": {
     "start": "GENERATE_SOURCEMAP=false react-scripts start",
     "start:debug": "react-scripts start",
+    "start:win": "set GENERATE_SOURCEMAP=false && react-scripts start",
     "build": "GENERATE_SOURCEMAP=false INLINE_RUNTIME_CHUNK=false react-scripts build",
     "build:optimized": "GENERATE_SOURCEMAP=false INLINE_RUNTIME_CHUNK=false BUILD_PATH=./build-optimized react-scripts build && npm run analyze:size",
     "build:analyze": "npm run build && npx serve -s build",
@@ -58,6 +59,7 @@
     "@types/react-router-dom": "^5.3.3",
     "autoprefixer": "^10.4.21",
     "bundlesize": "^0.18.2",
+    "cross-env": "^10.0.0",
     "postcss": "^8.5.5",
     "source-map-explorer": "^2.5.3",
     "tailwindcss": "^4.1.10",
@@ -75,5 +77,5 @@
       "compression": "gzip"
     }
   ],
-  "proxy": "http://localhost:3002"
+  "proxy": "http://localhost:5000"
 }
