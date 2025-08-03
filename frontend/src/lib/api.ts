@@ -48,9 +48,9 @@ const getApiBaseUrl = (): string => {
     return "";
   }
 
-  // 개발 환경 - Express 백엔드 포트 3002로 연결
-  console.log("✅ 개발 환경 로컬 서버 사용: http://localhost:3002");
-  return "http://localhost:3002";
+  // 개발 환경 - Express 백엔드 포트 5000으로 연결
+  console.log("✅ 개발 환경 로컬 서버 사용: http://localhost:5000");
+  return "http://localhost:5000";
 };
 
 export const API_BASE_URL = getApiBaseUrl();
@@ -240,20 +240,20 @@ export const resetPerformanceStats = () => {
 // Axios 인스턴스 생성
 const createApiInstance = (): AxiosInstance => {
   const instance = axios.create({
-    baseURL: API_BASE_URL,
+    baseURL: "http://localhost:5000",
     // 더 세밀한 timeout 설정
-    timeout: process.env.NODE_ENV === "production" ? 45000 : 15000, // 응답 전체 timeout
+    timeout: process.env.NODE_ENV === "production" ? 60000 : 60000, // 응답 전체 timeout
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json, text/plain, */*",
-      "Accept-Encoding": "gzip, deflate, br", // gzip 압축 지원
+      // "Accept-Encoding": "gzip, deflate, br", // gzip 압축 지원
       "Cache-Control": "no-cache",
-      Connection: "keep-alive", // Keep-Alive 설정
-      "Keep-Alive": "timeout=30, max=1000", // Keep-Alive 세부 설정
-      // 브라우저 식별
-      "User-Agent": "LovleChat-Frontend/1.0",
+      // Connection: "keep-alive", // Keep-Alive 설정
+      // "Keep-Alive": "timeout=30, max=1000", // Keep-Alive 세부 설정
+      // // 브라우저 식별
+      // "User-Agent": "LovleChat-Frontend/1.0",
     },
-    withCredentials: true, // CORS credentials
+    // withCredentials: true, // CORS credentials
 
     // 추가 HTTP 최적화 설정
     validateStatus: (status) => status < 500, // 5xx 에러만 reject
@@ -534,15 +534,20 @@ export const apiDelete = async <T = any>(
   return response.data;
 };
 
+const multipartApi = axios.create({
+  baseURL: "http://localhost:5000", // ✅ 반드시 명시
+  timeout: 60000,
+  withCredentials: false,
+});
+
 // s3 업로드 로직 - 추가한 코드
 export const uploadImageS3 = async (file: File) => {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await api.post("/api/upload/s3", formData, {
-    method: "POST",
+  const res = await multipartApi.post("/api/upload/s3", formData, {
     headers: {
-      "Content-Type": "multipart/form-data",
+      // ✅ 절대 Content-Type 직접 쓰지 마라 (multipart면 자동으로 붙음)
     },
   });
 
