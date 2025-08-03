@@ -87,6 +87,8 @@ const allowedOrigins = [
   "http://localhost:3001", // 로컬 serve
   "http://54.79.211.48:3001", // EC2 frontend
   "http://localhost:3002",
+  "http://localhost:5000",
+  "http://localhost:5000/",
   "http://54.79.211.48", // EC2 Nginx (포트 80)
   "http://54.79.211.48:80", // EC2 Nginx 명시적
   process.env.FRONTEND_URL, // 환경변수로 지정된 도메인
@@ -161,6 +163,34 @@ app.use(
   })
 );
 
+// 🔥 반드시 app.use("/api/upload/s3")보다 위에 추가할 것!
+app.options(
+  "/api/upload/s3",
+  cors({
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin))
+        return callback(null, true);
+      if (origin.match(/^https:\/\/lovlechat-.*\.vercel\.app$/))
+        return callback(null, true);
+      return callback(new Error("Not allowed by CORS"), false);
+    },
+    credentials: true,
+    methods: ["POST", "OPTIONS"],
+    allowedHeaders: [
+      "Content-Type",
+      "Authorization",
+      "X-Requested-With",
+      "Accept",
+      "Origin",
+      "Cache-Control",
+      "X-File-Name",
+    ],
+  })
+);
+
+// s3 업로드 라우트
+app.use("/api/upload/s3", require("./routes/upload-s3"));
+
 // CORS 에러 핸들러
 app.use((err, req, res, next) => {
   if (err.message && err.message.includes("CORS policy")) {
@@ -200,9 +230,6 @@ const limiter = rateLimit({
   },
 });
 app.use(limiter);
-
-// s3 업로드 라우트
-app.use("/api/upload/s3", require("./routes/upload-s3"));
 
 // Body parsing middleware 최적화
 app.use(
