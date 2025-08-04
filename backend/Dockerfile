@@ -11,6 +11,8 @@ COPY package*.json ./
 RUN npm install
 
 # 소스 코드 복사
+COPY .env .env
+
 COPY . .
 
 # 포트 오픈
