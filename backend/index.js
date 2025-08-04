@@ -14,7 +14,7 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Trust proxy for Vercel/AWS Load Balancer
+// Trust proxy for Vercel/AWS Load Balancer.
 app.set("trust proxy", 1);
 
 // 성능 최적화 미들웨어
